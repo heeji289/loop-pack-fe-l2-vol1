@@ -282,7 +282,7 @@ describe('상품 정보', () => {
     expect(screen.getByRole('button', { name: /구매하기/ })).toBeEnabled();
   });
 
-  it('세션 확인이 실패하면 비로그인으로 오인하지 않고 확인 실패를 알린다', async () => {
+  it('세션 확인 실패 중에는 구매를 막고 재조회로 비로그인이 확인되면 로그인 안내를 연다', async () => {
     server.use(
       http.get('*/api/auth/me', () =>
         HttpResponse.json(
@@ -301,17 +301,29 @@ describe('상품 정보', () => {
 
     expect(alert).toHaveTextContent('로그인 상태를 확인하지 못했습니다.');
 
-    // catalog가 준비돼 구매 버튼이 눌리는 상태여야 세션 가드를 검증할 수 있다
+    await screen.findByText(productAt(0).name);
     const purchaseButton = screen.getByRole('button', { name: /구매하기/ });
 
-    await waitFor(() => {
-      expect(purchaseButton).toBeEnabled();
-    });
+    expect(purchaseButton).toBeDisabled();
 
-    // 상태를 모르는 채 구매를 누르면 로그인 안내를 열거나 draft를 확정하지 않는다
     await user.click(purchaseButton);
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(draftItems()).toEqual([]);
+
+    server.use(
+      http.get('*/api/auth/me', () =>
+        HttpResponse.json({ message: '로그인이 필요합니다.' }, { status: 401 }),
+      ),
+    );
+    await user.click(within(alert).getByRole('button', { name: '다시 시도' }));
+
+    await waitFor(() => {
+      expect(purchaseButton).toBeEnabled();
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await user.click(purchaseButton);
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
 });

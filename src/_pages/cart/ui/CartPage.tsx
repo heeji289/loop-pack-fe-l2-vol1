@@ -78,13 +78,12 @@ function CartContent() {
           0,
         );
   const canPurchase =
-    selectedItems.length > 0 && selectedTotalPrice !== undefined;
+    selectedItems.length > 0 &&
+    selectedTotalPrice !== undefined &&
+    user !== undefined;
 
   const handlePurchaseClick = () => {
     if (!canPurchase) return;
-
-    // 세션 확인 전이거나 실패한 상태. 비로그인으로 단정하지 않고 아래 안내의 재시도를 기다린다.
-    if (user === undefined) return;
 
     // 구매 의사를 확정하는 순간, 선택 상품·수량을 주문 예정 목록(draft)으로 스냅샷 뜬다
     createCheckoutDraft(selectedItems);

@@ -25,7 +25,9 @@ declare module '@tanstack/react-query' {
  * 도메인을 모르는 QueryClient 기본 생성. 앱 정책(캐시 콜백)은 호출부가 config로 조합한다.
  * 서버 선조회도 이 함수로 요청마다 새로 만들어 사용자 간 캐시가 섞이지 않게 한다.
  */
-export function makeQueryClient(config?: QueryClientConfig) {
+export function makeQueryClient(
+  config?: Pick<QueryClientConfig, 'queryCache' | 'mutationCache'>,
+) {
   const maxRetryCount = environmentManager.isServer() ? 0 : 2;
 
   return new QueryClient({
