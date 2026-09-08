@@ -7,11 +7,7 @@ import {
 } from '@tanstack/react-query';
 
 import { identify, reset } from '@/analytics/events';
-import {
-  replaceSessionUser,
-  sessionQueries,
-  type SessionUser,
-} from '@/entities/session';
+import { replaceSessionUser, sessionQueries } from '@/entities/session';
 import { buildExpiredLoginUrl, isProtectedPath } from '@/features/auth';
 import { isUnauthorizedError } from '@/shared/api-client';
 import { replaceDocument } from '@/shared/navigation';
@@ -63,10 +59,12 @@ export function makeAppQueryClient() {
         }
       },
       // /me는 401을 null 데이터로 성공시켜 onError가 없다. null 성공도 만료 흐름에 잇는다.
-      onSuccess: (data, query) => {
+      onSuccess: (_data, query) => {
         if (query.queryHash !== ME_QUERY_HASH) return;
 
-        const user = data as SessionUser | null;
+        // 전역 콜백의 data는 unknown이라, 방금 기록된 캐시를 쿼리 타입 그대로 다시 읽는다
+        const user =
+          queryClient.getQueryData(sessionQueries.me().queryKey) ?? null;
 
         if (user === null) {
           void handleSessionExpired();
