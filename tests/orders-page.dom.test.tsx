@@ -121,6 +121,39 @@ describe('주문 내역', () => {
     expect(await screen.findByText('주문 order-just-made')).toBeInTheDocument();
   });
 
+  it('세션 확인이 실패하면 로딩에 머물지 않고 확인 실패와 다시 시도를 보여준다', async () => {
+    server.use(
+      http.get(
+        '*/api/auth/me',
+        () =>
+          HttpResponse.json(
+            { message: '세션을 확인하지 못했습니다.' },
+            { status: 500 },
+          ),
+        { once: true },
+      ),
+      http.get('*/api/auth/me', () =>
+        HttpResponse.json({ user: SESSION_USER }),
+      ),
+    );
+    respondOrders([]);
+    // 서버 hydration이 없던 상황이라 화면이 /me를 직접 조회하고 실패를 만난다
+    const { user } = renderWithProviders(<OrdersPage />, {
+      seedSessionUser: false,
+    });
+
+    const alert = await screen.findByRole('alert');
+
+    expect(alert).toHaveTextContent('로그인 상태를 확인하지 못했습니다.');
+
+    // 다시 시도로 세션이 확인되면 주문 조회로 이어진다
+    await user.click(within(alert).getByRole('button', { name: '다시 시도' }));
+
+    expect(
+      await screen.findByText('주문 내역이 없습니다.'),
+    ).toBeInTheDocument();
+  });
+
   it('주문이 없으면 빈 상태와 상품 목록 CTA를 보여준다', async () => {
     respondOrders([]);
     renderOrdersPage();

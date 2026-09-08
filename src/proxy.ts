@@ -26,5 +26,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // Next가 빌드 시 정적 분석하는 값이라 리터럴만 허용된다.
+  // features/auth의 isProtectedPath와 같은 기준을 수동으로 맞춘다.
   matcher: ['/orders/:path*'],
 };

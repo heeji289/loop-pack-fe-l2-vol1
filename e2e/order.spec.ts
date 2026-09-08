@@ -41,4 +41,11 @@ test('장바구니에서 선택한 상품을 주문하면 새 주문이 내역�
     name: `주문 ${order.id}`,
   });
   await expect(createdOrder).toContainText(productName);
+
+  // 실제 주문이 있어도 첫 HTML은 로딩 상태다. 주문 내역은 브라우저가 조회한다.
+  const documentResponse = await page.request.get('/orders');
+  expect(documentResponse.status()).toBe(200);
+  const html = await documentResponse.text();
+  expect(html).toContain('주문 내역을 불러오는 중');
+  expect(html).not.toContain(`aria-label="주문 ${order.id}"`);
 });

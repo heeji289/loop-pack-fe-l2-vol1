@@ -1,7 +1,6 @@
 'use client';
 
-import { useMutation } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, type SubmitEvent } from 'react';
 
 import { loginMutationOptions } from '../api/mutations';
@@ -13,7 +12,8 @@ import {
   trackEvent,
   type LoginFrom,
 } from '@/analytics/events';
-import { useSessionActions } from '@/entities/session';
+import { replaceSessionUser } from '@/entities/session';
+import { replaceDocument } from '@/shared/navigation';
 
 export function LoginForm({
   redirectPathAfterLogin,
@@ -22,8 +22,7 @@ export function LoginForm({
   redirectPathAfterLogin: string | null;
   from: LoginFrom;
 }) {
-  const router = useRouter();
-  const { setUser } = useSessionActions();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     trackEvent('login_start', { from });
@@ -31,11 +30,12 @@ export function LoginForm({
 
   const { mutate, isPending, error } = useMutation({
     ...loginMutationOptions,
-    onSuccess: ({ user }) => {
+    onSuccess: async ({ user }) => {
+      await replaceSessionUser(queryClient, user);
       identify(user.id);
       trackEvent('login_success', { from });
-      setUser(user);
-      router.replace(toSafeNextPath(redirectPathAfterLogin));
+      // 라우터 대신 문서 이동으로 서버가 새 쿠키 기준의 화면을 그리고 이전 캐시가 남지 않게 한다.
+      replaceDocument(toSafeNextPath(redirectPathAfterLogin));
     },
     onError: (loginError) => {
       trackEvent('login_fail', { reason: toLoginFailReason(loginError) });

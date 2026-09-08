@@ -1,10 +1,11 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 
 import styles from './MyPage.module.css';
 
-import { useSessionUser } from '@/entities/session';
+import { sessionQueries } from '@/entities/session';
 import { buildLoginUrl } from '@/features/auth';
 
 export function MyPage() {
@@ -17,7 +18,12 @@ export function MyPage() {
 }
 
 function MyContent() {
-  const user = useSessionUser();
+  const {
+    data: user,
+    isPending,
+    isError,
+    refetch,
+  } = useQuery(sessionQueries.me());
 
   return (
     <>
@@ -25,6 +31,26 @@ function MyContent() {
         <div className={styles.accountCard}>
           <p className={styles.name}>{user.name}</p>
           <p className={styles.email}>{user.email}</p>
+        </div>
+      ) : isPending ? (
+        <div className={styles.accountCard}>
+          <p className={styles.loginNotice}>계정 정보를 확인하는 중</p>
+        </div>
+      ) : isError ? (
+        // 확인 실패는 비로그인이 아니다. 기존 사용자를 지우지 않고 재시도만 받는다.
+        <div className={styles.accountCard} role="alert">
+          <p className={styles.loginNotice}>
+            로그인 상태를 확인하지 못했습니다.
+          </p>
+          <button
+            type="button"
+            className={styles.loginButton}
+            onClick={() => {
+              void refetch();
+            }}
+          >
+            다시 시도
+          </button>
         </div>
       ) : (
         <div className={styles.accountCard}>

@@ -21,3 +21,9 @@ export function createOrder(request: OrderCreateRequest) {
     body: JSON.stringify(request),
   });
 }
+
+export function getOrders() {
+  return apiClient<OrderListResponse>('/api/orders', {
+    cache: 'no-store',
+  });
+}

@@ -7,7 +7,7 @@ import styles from './HeroSection.module.css';
 import { HomeContent } from './HomeContent';
 
 import { productQueries } from '@/entities/product';
-import { getQueryClient } from '@/shared/get-query-client';
+import { makeQueryClient } from '@/shared/query-client';
 
 /**
  * Hero 이미지와 오버레이 카드는 홈 조회 결과를 쓰지 않으므로 셸에 두어 첫 청크에 실어 보낸다.
@@ -84,7 +84,7 @@ async function fetchHome() {
   // 빌드 중이 아니라 실제 요청이 들어온 뒤에 내부 API를 부르게 한다.
   await connection();
 
-  const queryClient = getQueryClient();
+  const queryClient = makeQueryClient();
 
   await queryClient.prefetchQuery(productQueries.home());
 

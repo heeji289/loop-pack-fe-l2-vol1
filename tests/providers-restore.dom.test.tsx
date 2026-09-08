@@ -3,8 +3,9 @@ import { expect, it, vi } from 'vitest';
 
 import { CartPage } from '@/_pages/cart';
 import Providers from '@/app/providers';
+import { getQueryClient } from '@/app/query-client';
 import { CART_STORAGE_KEY } from '@/entities/cart/model/cart-store';
-import { SessionProvider } from '@/entities/session';
+import { sessionQueries } from '@/entities/session';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -25,11 +26,12 @@ it('Providers가 저장된 장바구니의 복원을 시작한다', async () => 
     }),
   );
 
+  // 서버 layout의 hydration을 대신해 비로그인 사용자를 시드한다 (/me 네트워크 요청 방지)
+  getQueryClient().setQueryData(sessionQueries.me().queryKey, null);
+
   render(
     <Providers>
-      <SessionProvider initialUser={null}>
-        <CartPage />
-      </SessionProvider>
+      <CartPage />
     </Providers>,
   );
 

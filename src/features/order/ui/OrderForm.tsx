@@ -16,6 +16,7 @@ import {
   orderQueries,
   useCheckoutActions,
 } from '@/entities/order';
+import { sessionQueries } from '@/entities/session';
 
 export function OrderForm({
   orderProducts,
@@ -40,7 +41,10 @@ export function OrderForm({
 
   const { mutate, isPending, error } = useMutation({
     mutationFn: createOrder,
-    onSuccess: ({ order }, request) => {
+    // 세션이 필요한 요청 표시. 401이면 앱 공통 처리가 정리와 로그인 이동을 맡는다.
+    meta: { requiresAuth: true },
+    onMutate: () => queryClient.getQueryData(sessionQueries.me().queryKey)?.id,
+    onSuccess: ({ order }, request, orderingUserId) => {
       trackEvent('order_complete', {
         orderId: order.id,
         productIds: order.items.map((item) => item.productId),
@@ -50,6 +54,13 @@ export function OrderForm({
       // 주문된 상품만 장바구니에서 빼고, draft와 주문 캐시를 정리한 뒤 내역으로 이동한다
       removeItems(request.items.map((item) => item.productId));
       clearCheckoutDraft();
+
+      // 성공한 주문은 정리하되, 만료·계정 교체 뒤의 이동과 계정 조회는 시작하지 않는다.
+      const currentUser = queryClient.getQueryData(
+        sessionQueries.me().queryKey,
+      );
+      if (!orderingUserId || currentUser?.id !== orderingUserId) return;
+
       void queryClient.invalidateQueries({ queryKey: orderQueries.all() });
       router.replace('/orders');
     },

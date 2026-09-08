@@ -11,7 +11,7 @@ import styles from './CartPage.module.css';
 import { useCart, useCartActions, type CartItem } from '@/entities/cart';
 import { useCheckoutActions } from '@/entities/order';
 import { productQueries, type Product } from '@/entities/product';
-import { useSessionUser } from '@/entities/session';
+import { sessionQueries } from '@/entities/session';
 import { LoginRequiredDialog } from '@/features/auth';
 
 export function CartPage() {
@@ -26,7 +26,11 @@ export function CartPage() {
 function CartContent() {
   const router = useRouter();
 
-  const user = useSessionUser();
+  const {
+    data: user,
+    isError: isSessionError,
+    refetch: refetchSession,
+  } = useQuery(sessionQueries.me());
   const items = useCart((cart) => cart.items);
   const { createCheckoutDraft } = useCheckoutActions();
 
@@ -79,10 +83,13 @@ function CartContent() {
   const handlePurchaseClick = () => {
     if (!canPurchase) return;
 
+    // 세션 확인 전이거나 실패한 상태. 비로그인으로 단정하지 않고 아래 안내의 재시도를 기다린다.
+    if (user === undefined) return;
+
     // 구매 의사를 확정하는 순간, 선택 상품·수량을 주문 예정 목록(draft)으로 스냅샷 뜬다
     createCheckoutDraft(selectedItems);
 
-    if (!user) {
+    if (user === null) {
       setIsLoginDialogOpen(true);
 
       return;
@@ -94,6 +101,20 @@ function CartContent() {
 
   return (
     <>
+      {/* 세션 확인 실패는 비로그인이 아니므로 로그인 안내 대신 재시도를 받는다 */}
+      {isSessionError && user === undefined && (
+        <p role="alert">
+          로그인 상태를 확인하지 못했습니다.
+          <button
+            type="button"
+            onClick={() => {
+              void refetchSession();
+            }}
+          >
+            다시 시도
+          </button>
+        </p>
+      )}
       {isCatalogError && (
         <p role="alert">
           상품 정보를 불러오지 못했습니다.

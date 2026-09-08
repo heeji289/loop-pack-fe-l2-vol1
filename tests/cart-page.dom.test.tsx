@@ -281,4 +281,37 @@ describe('상품 정보', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /구매하기/ })).toBeEnabled();
   });
+
+  it('세션 확인이 실패하면 비로그인으로 오인하지 않고 확인 실패를 알린다', async () => {
+    server.use(
+      http.get('*/api/auth/me', () =>
+        HttpResponse.json(
+          { message: '세션을 확인하지 못했습니다.' },
+          { status: 500 },
+        ),
+      ),
+    );
+    seedCartItems({ productId: productAt(0).id, quantity: 1, checked: true });
+    // 서버 hydration이 없던 상황이라 화면이 /me를 직접 조회하고 실패를 만난다
+    const { user } = renderWithProviders(<CartPage />, {
+      seedSessionUser: false,
+    });
+
+    const alert = await screen.findByRole('alert');
+
+    expect(alert).toHaveTextContent('로그인 상태를 확인하지 못했습니다.');
+
+    // catalog가 준비돼 구매 버튼이 눌리는 상태여야 세션 가드를 검증할 수 있다
+    const purchaseButton = screen.getByRole('button', { name: /구매하기/ });
+
+    await waitFor(() => {
+      expect(purchaseButton).toBeEnabled();
+    });
+
+    // 상태를 모르는 채 구매를 누르면 로그인 안내를 열거나 draft를 확정하지 않는다
+    await user.click(purchaseButton);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(draftItems()).toEqual([]);
+  });
 });

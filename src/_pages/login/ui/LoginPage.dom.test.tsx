@@ -3,24 +3,24 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LoginPage } from './LoginPage';
 
-import { getQueryClient } from '@/shared/get-query-client';
 import { SESSION_PASSWORD, SESSION_USER } from '@tests/msw/fixtures';
 import { renderWithProviders } from '@tests/render-with-providers';
 
-const router = vi.hoisted(() => ({ replace: vi.fn() }));
+const { replaceDocument } = vi.hoisted(() => ({
+  replaceDocument: vi.fn<(url: string) => void>(),
+}));
 
-vi.mock('next/navigation', () => ({ useRouter: () => router }));
+vi.mock('@/shared/navigation', () => ({ replaceDocument }));
 
 // 서버 컴포넌트는 async 함수라 먼저 실행해 트리를 받은 뒤 렌더한다. URL query가 로더를 거쳐 폼까지 닿는지 본다.
 const renderLoginPage = async (query: string) => {
   const searchParams = Object.fromEntries(new URLSearchParams(query));
   const page = await LoginPage({ searchParams: Promise.resolve(searchParams) });
 
-  return renderWithProviders(page, { queryClient: getQueryClient() });
+  return renderWithProviders(page);
 };
 
 afterEach(() => {
-  getQueryClient().clear();
   vi.clearAllMocks();
 });
 
@@ -35,7 +35,7 @@ describe('로그인 페이지', () => {
     await user.click(screen.getByRole('button', { name: '로그인' }));
 
     await waitFor(() => {
-      expect(router.replace).toHaveBeenCalledWith('/orders?status=pending');
+      expect(replaceDocument).toHaveBeenCalledWith('/orders?status=pending');
     });
   });
 
@@ -53,7 +53,7 @@ describe('로그인 페이지', () => {
     await user.click(screen.getByRole('button', { name: '로그인' }));
 
     await waitFor(() => {
-      expect(router.replace).toHaveBeenCalledWith('/orders?status=pending');
+      expect(replaceDocument).toHaveBeenCalledWith('/orders?status=pending');
     });
   });
 });

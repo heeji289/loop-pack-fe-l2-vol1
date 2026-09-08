@@ -5,13 +5,15 @@ import { NuqsTestingAdapter, type UrlUpdateEvent } from 'nuqs/adapters/testing';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
 
-import { SessionProvider, type SessionUser } from '@/entities/session';
+import { sessionQueries, type SessionUser } from '@/entities/session';
 
 type RenderWithProvidersOptions = {
   searchParams?: string;
   gcTime?: number;
   queryClient?: QueryClient;
   initialUser?: SessionUser | null;
+  /** 서버 hydration이 없던 상황(세션 확인 실패 테스트)을 만들 때만 끈다 */
+  seedSessionUser?: boolean;
 };
 
 /** 페이지급 통합 테스트가 앱과 같은 프로바이더(URL 상태, 서버 상태) 안에서 돌게 한다. */
@@ -22,6 +24,7 @@ export function renderWithProviders(
     gcTime,
     queryClient: providedQueryClient,
     initialUser = null,
+    seedSessionUser = true,
   }: RenderWithProvidersOptions = {},
 ) {
   const queryClient =
@@ -30,6 +33,12 @@ export function renderWithProviders(
       // 조회 실패를 확인하는 테스트가 재시도 백오프를 실제로 기다리지 않게
       defaultOptions: { queries: { retry: false, gcTime } },
     });
+
+  // 서버 layout이 확인한 사용자를 ['me']로 hydration하는 것과 같은 시작 상태를 만든다
+  if (seedSessionUser) {
+    queryClient.setQueryData(sessionQueries.me().queryKey, initialUser);
+  }
+
   // 진짜 라우터가 없으니 nuqs가 URL에 쓰려는 값은 이 콜백으로만 볼 수 있다
   const onUrlUpdate = vi.fn<(event: UrlUpdateEvent) => void>();
 
@@ -40,9 +49,7 @@ export function renderWithProviders(
       hasMemory
       onUrlUpdate={onUrlUpdate}
     >
-      <QueryClientProvider client={queryClient}>
-        <SessionProvider initialUser={initialUser}>{ui}</SessionProvider>
-      </QueryClientProvider>
+      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
     </NuqsTestingAdapter>
   );
   const { rerender, unmount } = render(tree(searchParams));

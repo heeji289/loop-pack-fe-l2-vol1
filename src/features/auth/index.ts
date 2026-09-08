@@ -2,7 +2,9 @@ export {
   LOGIN_PATH,
   LOGIN_REASON_MESSAGE,
   LOGIN_REASONS,
+  buildExpiredLoginUrl,
   buildLoginUrl,
+  isProtectedPath,
   toSafeNextPath,
   type LoginReason,
 } from './model/login-url';

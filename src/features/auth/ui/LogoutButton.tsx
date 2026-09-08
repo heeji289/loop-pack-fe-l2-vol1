@@ -1,31 +1,28 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
 
 import { logoutMutationOptions } from '../api/mutations';
 
 import { reset } from '@/analytics/events';
-import { orderQueries, useCheckoutActions } from '@/entities/order';
-import { useSessionActions } from '@/entities/session';
+import { useCheckoutActions } from '@/entities/order';
+import { replaceSessionUser } from '@/entities/session';
+import { replaceDocument } from '@/shared/navigation';
 
 export function LogoutButton() {
   const queryClient = useQueryClient();
-  const router = useRouter();
 
-  const { clearUser } = useSessionActions();
   const { clearCheckoutDraft } = useCheckoutActions();
   const { mutate, isPending, error } = useMutation({
     ...logoutMutationOptions,
-    onSuccess: () => {
+    onSuccess: async () => {
       // 장바구니·위시리스트는 브라우저가 유일한 원본이라 두고, 계정 범위 상태만 정리한다
-      clearUser();
-      reset();
       clearCheckoutDraft();
+      await replaceSessionUser(queryClient, null);
+      reset();
 
-      queryClient.removeQueries({ queryKey: orderQueries.all() });
-
-      router.replace('/');
+      // 문서 이동으로 서버가 쿠키 없는 화면을 새로 그리고 이전 캐시가 남지 않게 한다.
+      replaceDocument('/');
     },
   });
 

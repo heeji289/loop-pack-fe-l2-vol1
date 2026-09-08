@@ -72,6 +72,10 @@ const isLoginRequest = (body: unknown): body is LoginRequest =>
   typeof (body as LoginRequest).password === 'string';
 
 export const handlers = [
+  // 비로그인 기본. 로그인 상태는 테스트가 ['me'] 캐시를 시드하거나 핸들러를 덮는다.
+  http.get('*/api/auth/me', () =>
+    HttpResponse.json({ message: '로그인이 필요합니다.' }, { status: 401 }),
+  ),
   http.get('*/api/home', () => HttpResponse.json(HOME_RESPONSE)),
   http.get('*/api/products', ({ request }) =>
     HttpResponse.json(productListResponse(new URL(request.url).searchParams)),

@@ -12,7 +12,7 @@ import {
   ProductSearchForm,
   toProductListQuery,
 } from '@/features/product';
-import { getQueryClient } from '@/shared/get-query-client';
+import { makeQueryClient } from '@/shared/query-client';
 
 export function ProductsPage({
   searchParams,
@@ -49,7 +49,7 @@ async function ProductListContent({
   searchParams: Promise<SearchParams>;
 }) {
   const conditions = await loadProductListConditions(searchParams);
-  const queryClient = getQueryClient();
+  const queryClient = makeQueryClient();
 
   await queryClient.prefetchQuery(
     productQueries.list(toProductListQuery(conditions)),

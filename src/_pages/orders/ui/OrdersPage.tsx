@@ -8,7 +8,7 @@ import styles from './OrdersPage.module.css';
 
 import { orderQueries } from '@/entities/order';
 import { productQueries } from '@/entities/product';
-import { useSessionUser } from '@/entities/session';
+import { sessionQueries } from '@/entities/session';
 
 export function OrdersPage() {
   return (
@@ -20,7 +20,11 @@ export function OrdersPage() {
 }
 
 function OrdersContent() {
-  const user = useSessionUser();
+  const {
+    data: user,
+    isError: isSessionError,
+    refetch: refetchSession,
+  } = useQuery(sessionQueries.me());
   const {
     data: orderList,
     isPending,
@@ -29,7 +33,7 @@ function OrdersContent() {
     refetch,
   } = useQuery({
     ...orderQueries.list(user?.id ?? ''),
-    // 만료로 사용자가 비워진 뒤에는 에러 경계가 로그인으로 보내므로 조회를 시작하지 않는다
+    // 만료로 사용자가 비워진 뒤에는 401 공통 처리가 로그인으로 보내므로 조회를 시작하지 않는다
     enabled: Boolean(user),
   });
   const {
@@ -43,6 +47,23 @@ function OrdersContent() {
   });
 
   const hasOrders = Boolean(orderList?.orders.length);
+
+  // 세션 확인 실패는 비로그인이 아니다. 로딩에 머물지 않고 확인 실패와 재시도를 보여준다.
+  if (!user && isSessionError) {
+    return (
+      <p role="alert">
+        로그인 상태를 확인하지 못했습니다.
+        <button
+          type="button"
+          onClick={() => {
+            void refetchSession();
+          }}
+        >
+          다시 시도
+        </button>
+      </p>
+    );
+  }
 
   // 상품명 없이 ID만 잠깐 노출되지 않게 catalog까지 기다린다. 실패는 아래에서 안내한다.
   if (

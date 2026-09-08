@@ -9,7 +9,7 @@ import {
   PRODUCT_SORT_LABEL,
   toProductListQuery,
 } from '@/features/product';
-import { getQueryClient } from '@/shared/get-query-client';
+import { makeQueryClient } from '@/shared/query-client';
 
 /** 결과가 0건이면 보여줄 상품 이미지가 없다. 공유 카드가 비지 않게 대표 이미지를 쓴다. */
 const FALLBACK_OG_IMAGE = '/images/products/p6.jpg';
@@ -22,7 +22,7 @@ export async function generateMetadata({
   await connection();
 
   const conditions = await loadProductListConditions(searchParams);
-  const queryClient = getQueryClient();
+  const queryClient = makeQueryClient();
 
   try {
     const list = await queryClient.fetchQuery(
