@@ -3,7 +3,7 @@ import { connection } from 'next/server';
 
 import { HomePage } from '@/_pages/home';
 import { productQueries } from '@/entities/product';
-import { getQueryClient } from '@/shared/get-query-client';
+import { makeQueryClient } from '@/shared/query-client';
 
 /**
  * 본문과 같은 query factory를 써서 같은 GET을 만든다. 같은 render의 동일 요청은 합쳐진다.
@@ -13,7 +13,7 @@ import { getQueryClient } from '@/shared/get-query-client';
 export async function generateMetadata(): Promise<Metadata> {
   await connection();
 
-  const queryClient = getQueryClient();
+  const queryClient = makeQueryClient();
 
   try {
     const { banner } = await queryClient.fetchQuery(productQueries.home());
