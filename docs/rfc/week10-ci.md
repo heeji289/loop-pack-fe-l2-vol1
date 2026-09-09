@@ -93,7 +93,33 @@ check step raw: cold 89/67/88s(중앙값 88), warm 90/86/87s(중앙값 87). 이 
 - build를 별도 job으로 두지 않은 근거: E2E가 build 산출물(.next)에 의존하는데 job 간 파일 시스템은 공유되지 않아, 분리하면 재빌드(중복 부활) 또는 artifact 전송+직렬화(needs로 크리티컬 패스 ~70s→~100s 후퇴) 중 하나를 강요당함. 원칙 — **독립인 검증은 job으로 가르고(lint·type·test ∥ build+E2E), 의존인 검증은 한 job 안에서 step으로 가른다**(빌드 실패는 Build step에서 독립적으로 보임).
 - 함께 적용(별도 축): ci.yml 삭제(러너 사용량 ×2→×1), concurrency(ref 포함·PR만 취소, 낭비 방지), timeout-minutes 10분(warm 중앙값 2m14s의 ~4배, 측정 기반 산정).
 
-## After (전략 적용 후 측정)
+## After (2026-09-09, run [34357394959](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34357394959) attempt 2~7, 커밋 5cadb544, PR #3)
+
+Before와 같은 프로토콜: cold = `gh cache delete --all` 후 같은 커밋 re-run ×3, warm = 캐시 보존 re-run ×3.
+
+### Before/After 비교 — run wall-clock
+
+| 조건 | Before raw (중앙값) | After raw (중앙값) | 판정 (구간 비겹침 규칙) |
+|---|---|---|---|
+| cold | 144/128/146s (**144s**) | 94/91/110s (**94s**) | [128,146] vs [91,110] — 겹침 없음 → **개선 (−50s, −35%)** |
+| warm | 151/132/134s (**134s**) | 69/83/71s (**71s**) | [132,151] vs [69,83] — 겹침 없음 → **개선 (−63s, −47%)** |
+
+### 변화가 병목과 연결되는가 (전략별 인과)
+
+| 전략 | Before | After | 확인 |
+|---|---|---|---|
+| ② job 병렬화 | test 22s+lint 17s가 E2E 뒤 직렬 | checks job(63~73s) ∥ build-e2e job(64~104s) — wall = max | 직렬 합산이면 ~130s였을 경로가 max로 접힘. 두 job 크기가 비슷해 균형도 좋음 |
+| ③ 2차 build 제거 | `pnpm test:e2e` 32~33s (내부에 재빌드 포함) | E2E tests step 20~22s | **예측한 −10s가 그대로 실현.** Build는 독립 step(11~13s)으로 분리 가시화 |
+| ① 브라우저 캐시 | miss 경로: 브라우저+OS deps 설치 26/27/38s (중앙값 **27s**) + 캐시 저장 3~6s(비교에서 제외) | hit 경로: 복원 2~7s + OS deps 11~13s + 캐시 후처리 0~1s = 14/20/15s (중앙값 **15s**) | **새 설치 27s(캐시 저장 제외) 대비 hit 전체 15s — 관찰 이득 ~12s** (표본 3회 한정 — 항상 보장 아님). 예상(−20~25s)보다 작은 이유: OS 라이브러리(apt)는 캐시 대상이 아니라 hit에도 `install-deps` 비용이 남음. Playwright 공식 문서는 같은 근거로 브라우저 캐시를 비권장하되, 쓴다면 버전 키를 권고 — 현 구현은 버전 키·hit 시 deps 설치 조건을 준수. **채택 근거: 공식 권고를 검토한 뒤 우리 실행에서 27→15s를 관찰해 유지** (miss가 잦은 환경이면 손해일 수 있음). 컨테이너 이미지 대안은 pull 비용이 절약분을 초과할 공산 + 내장 Node의 .nvmrc 불일치 위험으로 제외 — 시각 회귀·self-hosted 규모의 카드로 회고에 기록 |
+
+### 병렬화 함정 검증 — install 중복이 캐시 이득을 까먹는가
+
+- 두 job의 Install dependencies는 warm에서 **각 2s** (pnpm store 캐시를 양쪽이 공유 복원) — 중복 비용 합계 ~4s로 무시 가능. **함정 통과.**
+- 러너 사용량(billable) 관점: Before는 PR당 quality 134s + ci.yml ~132s ≈ **266s**, After는 checks ~64s + build-e2e ~65s ≈ **130s** — 병렬화로 job이 늘었는데도 ci.yml 삭제와 효율화로 **사용량도 절반**. wall-clock과 별개 축임을 유지.
+
+### 검증 항목 동일성
+
+Before와 After 모두 unit·integration / lint / typecheck / production build / E2E 5종 전부 실행 — 제거·축소 없음 (After에선 step 단위로 분리돼 실패 위치가 즉시 보임).
 
 ## 캐시 hit/miss 증명
 
