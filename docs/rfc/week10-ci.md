@@ -1,107 +1,215 @@
 # 10주차 — CI 측정·최적화 기록
 
-> 계획 결정: [week10-decisions.md](week10-decisions.md) (ADR-1~13). 측정 프로토콜은 ADR-2·4.
-> 이 문서는 측정이 진행되며 채워진다. 개선 수치는 세 축으로 분리해 기록한다:
-> **wall-clock 개선** (quality workflow 기준) / **러너 사용량 절감** (중복 workflow 제거) / **낭비 방지** (concurrency).
+quality workflow를 측정한 뒤 job 병렬화, 중복 빌드 제거, Playwright 브라우저 캐시를 적용했다. 전체 실행 시간의 중앙값은 cold **144→94초**, warm **134→71초**로 줄었다. unit·integration, lint, typecheck, production build, E2E 검증은 모두 유지했다.
 
-## 측정 조건
+결과는 세 축으로 구분한다. 중복 workflow 제거 효과를 quality workflow 자체의 속도 개선으로 계산하지 않는다.
 
-- 비교 축: quality workflow의 run wall-clock (attempt별 시작→종료)
-- cold = `gh cache delete --all`로 서버 캐시 전부 삭제 후 같은 커밋 "Re-run all jobs" / warm = 캐시 보존 재실행
-- 각 조건 3회 — 러너 시간대별 변동을 범위로 드러내기 위함 (7주차 measure-protocol 방식)
-- 측정 무대: fork(heeji289) 실험 PR — upstream은 캐시 삭제·re-run 권한이 없어 fork에서 수행 (근거: ADR-3)
+| 축 | Before | After |
+|---|---|---|
+| 전체 실행 시간 (quality run wall-clock) | cold 144초 · warm 134초 | cold 94초 (−35%) · warm 71초 (−47%) |
+| PR당 러너 사용 시간 추정 | 두 workflow 합계 약 266초 | 두 job 합계 약 130초 |
+| 연속 push의 중복 검증 | 이전 PR run도 계속 실행 | 같은 PR의 이전 run 취소, main run은 독립 실행 |
 
-## Before (2026-09-09, run [34329855053](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34329855053), 커밋 08344858)
+계획과 의사 결정은 [week10-decisions.md](week10-decisions.md)에 기록했다. 측정 프로토콜은 ADR-2·4, 실험 환경은 ADR-3을 따른다.
 
-### 실행 시간 — quality workflow run wall-clock
+## 측정 조건과 판정 기준
 
-| 조건 | 1회 | 2회 | 3회 | 중앙값 | 범위 |
+- **대상**: fork `heeji289`의 실험 PR. upstream에서는 캐시 삭제와 재실행 권한이 없어 fork에서 측정했다.
+- **전체 실행 시간**: quality workflow의 attempt별 시작부터 종료까지 걸린 시간.
+- **cold**: `gh cache delete --all`로 서버 캐시를 모두 삭제한 뒤 같은 커밋에서 “Re-run all jobs”.
+- **warm**: 캐시를 보존한 채 같은 커밋에서 재실행.
+- **반복**: 각 조건에서 3회. [7주차 측정 방식](../week-07-performance/measure-protocol.md)을 따라 원자료·중앙값·범위를 함께 기록했다.
+
+**판정 규칙은 After 측정 전에 고정했다.** After의 [최소, 최대] 구간이 Before보다 낮고 두 구간이 겹치지 않을 때만 “개선”으로 판정한다. 겹치면 “유의미하지 않음”으로 기록한다. 이는 3회 표본에 적용한 실무 판정 기준이며, 통계적 유의성을 검정한 결과는 아니다.
+
+## Before — 병목 확인
+
+2026-09-09 측정. 커밋 `08344858`, run [34329855053](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34329855053).
+
+### 전체 실행 시간
+
+| 조건 | 1회 | 2회 | 3회 | 중앙값 | 최소–최대 (폭) |
 |---|---|---|---|---|---|
-| cold (attempt 2·3·4) | 144s | 128s | 146s | **144s** | 18s (128–146) |
-| warm (attempt 5·6·7) | 151s | 132s | 134s | **134s** | 19s (132–151) |
+| cold — attempt 2·3·4 | 144초 | 128초 | 146초 | **144초** | 128–146초 (18초) |
+| warm — attempt 5·6·7 | 151초 | 132초 | 134초 | **134초** | 132–151초 (19초) |
 
-### step별 소요 (Actions job 화면의 step 이름 그대로, attempt 범위)
+### step별 소요 시간
 
-| step | cold (attempt 2·3·4) | warm (attempt 5·6·7) |
+Actions 화면의 step 이름을 그대로 사용했다.
+
+| step | cold — attempt 2·3·4 | warm — attempt 5·6·7 |
 |---|---|---|
-| Set up job | 1s | 1s |
-| Checkout | 1~2s | 2s |
-| Set up pnpm | 3~5s | 3~8s |
-| Set up Node.js | 5~8s | 8~9s |
-| Install dependencies | 6~7s | **2s** |
-| Install Playwright Chromium when used | 24~26s | 23~32s |
-| **Run quality checks** | **67~89s** | **86~90s** |
-| Post Set up Node.js | 4~5s | 0s |
+| Set up job | 1초 | 1초 |
+| Checkout | 1~2초 | 2초 |
+| Set up pnpm | 3~5초 | 3~8초 |
+| Set up Node.js | 5~8초 | 8~9초 |
+| Install dependencies | 6~7초 | **2초** |
+| Install Playwright Chromium when used | 24~26초 | 23~32초 |
+| **Run quality checks** | **67~89초** | **86~90초** |
+| Post Set up Node.js | 4~5초 | 0초 |
 
-> Post Set up Node.js는 pnpm store 캐시 **업로드** 단계 — cold에선 새 캐시를 저장하느라 4~5s, warm은 hit이라 저장을 건너뛰어 0s.
+`Post Set up Node.js`는 pnpm store 캐시를 저장하는 단계다. cold에서는 업로드에 4~5초가 들었고, warm에서는 기존 캐시를 사용해 저장을 건너뛰었다.
 
-### Run quality checks 내부 분해 (raw 로그 줄 타임스탬프, cold attempt 2 / warm attempt 6)
+### 가장 긴 step 내부 분해
 
-`pnpm check` = 아래 스크립트 5개의 직렬 실행:
+`Run quality checks`는 `pnpm check` 한 명령으로 아래 검증을 직렬 실행했다. raw 로그의 줄별 타임스탬프로 cold attempt 2와 warm attempt 6을 분해했다.
 
-| 스크립트 (실행 명령) | cold | warm |
+| 명령 | cold | warm |
 |---|---|---|
-| `pnpm test` (vitest run) | 23.4s | 21.8s |
-| `pnpm lint` (eslint .) | 16.8s | 16.2s |
-| `pnpm typecheck` (tsc --noEmit) | 4.7s | 4.6s |
-| `pnpm build` (next build) | 11.5s | 11.1s |
-| **`pnpm test:e2e` (playwright test)** | **32.7s** | **31.7s** |
+| `pnpm test` | 23.4초 | 21.8초 |
+| `pnpm lint` | 16.8초 | 16.2초 |
+| `pnpm typecheck` | 4.7초 | 4.6초 |
+| `pnpm build` | 11.5초 | 11.1초 |
+| **`pnpm test:e2e`** | **32.7초** | **31.7초** |
 
-### 병목 지목
+가장 긴 구간은 E2E 실행 32~33초였다. 여기에 매번 반복되는 Playwright 설치 23~32초를 더하면 **E2E 준비·실행에 약 60초**, 전체 약 140초의 43%가 들었다. 설치 시간에는 브라우저 다운로드와 OS 의존성 설치가 모두 포함된다. E2E 실행에는 `webServer`가 수행하는 두 번째 production build도 포함돼 있었다.
 
-가장 긴 단일 step은 **Run quality checks**(중앙값 ~88s)이고, 그 내부 최장 구간은 **`pnpm test:e2e` 32~33s**다. step 밖에서는 **Install Playwright Chromium when used 23~32s**가 매 실행 반복된다(브라우저 캐시 없음). 합치면 **E2E 계열 비용(브라우저 설치 + 실행)이 ~60s로 전체 wall-clock(~140s)의 43%** — 이것이 병목이다. 둘째는 `pnpm test` 22s, 셋째 `pnpm lint` 17s.
+### 캐시 이득과 실행 편차
 
-### 발견 1 — cold와 warm의 차이가 거의 없다
+pnpm store 캐시는 이미 적용돼 있었다. warm에서 의존성 설치는 6~7초에서 2초로 줄었지만, `Set up Node.js`의 약 198MB 캐시 복원에는 cold보다 약 2~3초가 더 들었다. 두 step만 보면 순이득은 약 2초였다. cold의 캐시 업로드 비용 4~5초는 별도로 발생했다.
 
-cold 중앙값 144s vs warm 134s. 차이 10s는 측정 범위(18~19s)보다 작아 유의미하지 않다. 이유를 step 단위로 분해하면 캐시의 손익이 세 step에 나뉘어 찍힌다: 이득은 Install dependencies 6~7s → 2s(**−4~5s**), 비용은 Set up Node.js의 198MB 복원(**warm이 +2~3s 더 걸림**) — 순이득 **~2초**. cold 쪽은 Post Set up Node.js에서 새 캐시 업로드로 +4~5s를 낸다. 즉 의존성이 작은 이 레포에선 복원 비용이 이득을 거의 상쇄한다. "캐시를 걸면 빨라진다"는 통념이 규모에 따라 미미할 수 있다는 실측.
+전체 실행 시간의 cold·warm 구간은 겹쳤다. 이 표본만으로 pnpm 캐시가 전체 시간을 뚜렷하게 줄였다고 판단하지 않았다.
 
-**개선 판정 규칙 (After 측정 전 고정)**: Before와 After 각각의 wall-clock [최소, 최대] 구간이 **겹치지 않을 때만** "개선"으로 인정하고, 겹치면 "유의미하지 않음"으로 기록한다. 특정 수치(예: 범위 19s)를 문턱으로 못박지 않는 이유 — 3회 표본의 범위는 이상치 하나에 좌우되는 거친 추정이라, After 자체의 흔들림까지 함께 보는 구간 비교가 더 강건하다.
+`Run quality checks` 자체도 cold 89/67/88초, warm 90/86/87초로 흔들렸다. 같은 조건에서 최대 22초 차이가 나므로 한 번의 빠른 실행을 대표값으로 삼지 않았다. 러너 성능 등 실행 환경의 영향을 의심할 수 있지만, 원인을 별도로 분리 측정하지는 않았다.
 
-### 발견 2 — Run quality checks step 자체의 러너 편차가 크다
+### 중복 workflow 확인
 
-check step raw: cold 89/67/88s(중앙값 88), warm 90/86/87s(중앙값 87). 이 step은 캐시와 무관하므로 cold/warm 중앙값이 사실상 같고, cold의 67s(attempt 3)는 **같은 조건 안에서 22s 벌어진 러너 뽑기 이상치**다. 러너 성능 편차가 측정 범위의 주요 원인 — 개별 raw가 아니라 중앙값으로 판정하고 범위를 병기해야 하는 이유의 실증.
+4주차의 `ci.yml`은 lint·unit·E2E를, 5주차의 `quality.yml`은 `pnpm check` 전체를 실행했다. `ci.yml`의 검증은 quality의 부분집합이어서 PR마다 lint·unit·E2E가 두 번씩 실행됐다. Node 버전도 `ci.yml`의 22와 `.nvmrc` 기준이 달랐다.
 
-### 발견: 5주간의 중복 실행
+두 workflow는 병렬로 실행되므로 `ci.yml` 삭제 효과는 **러너 사용 시간 절감**으로 기록한다. 이를 quality workflow의 wall-clock 단축으로 계산하지 않는다.
 
-4주차에 만든 ci.yml(lint·unit·E2E, node 22 하드코딩)과 5주차 스타터 quality.yml(`pnpm check` 전체)이 모든 PR에서 동시 실행돼 왔다. ci.yml의 검증은 quality.yml의 완전 부분집합 — PR마다 E2E·lint·unit이 2중 실행. 두 workflow는 병렬이라 제거해도 wall-clock은 줄지 않으므로, 이 정리는 러너 사용량 축(×2→×1)에만 기록한다.
+## 전략 선택
 
-## 전략 결정 (Before 측정 직후, After 측정 전 확정 — 2026-09-09)
+2026-09-09, Before 측정 직후 아래 세 전략을 함께 적용하기로 결정했다. 예상치는 당시의 가설로 남기고, 실제 결과와 구분한다.
 
-병목 분해가 드러낸 낭비는 세 종류였고, 각각 해법이 다르다. **세 가지 모두 적용한다.**
-
-| 전략 | 대응하는 낭비 | 예상 효과 |
+| 전략 | 대응하는 비용 | 당시 예상 |
 |---|---|---|
-| ① Playwright 브라우저 캐시 (`actions/cache`) | 다운로드 반복 — Install Playwright Chromium when used 24~32s | −20~25s |
-| ② job 병렬화 — lint·type·unit job ∥ build+E2E job | 줄 서기 — `pnpm test` 22s + `pnpm lint` 17s가 E2E 뒤 직렬로 합산 | 크리티컬 패스에서 44s 제거 |
-| ③ E2E 안의 2차 build 제거 — CI에선 webServer가 start만 | 중복 실행 — `pnpm check`의 build 직후 webServer가 `pnpm build`를 반복 | −8~10s |
+| Playwright 브라우저 캐시 | 매번 반복되는 브라우저 다운로드 | 20~25초 단축 — OS 의존성 비용을 충분히 반영하지 못한 예상 |
+| `checks` ∥ `build-e2e` 병렬화 | unit·lint·typecheck와 build·E2E의 직렬 실행 | 전체 완료를 결정하는 경로에서 약 44초 분리 |
+| CI의 중복 build 제거 | Build 직후 E2E의 `webServer`가 다시 build | 8~10초 단축 |
 
-### 과제 제시 전략 3종과의 대조 (선택/미선택 근거)
+과제에서 제시한 job 병렬화와 concurrency는 채택했다. pnpm store 캐시는 이미 적용돼 있었고 관찰한 순이득도 작아 추가 보강하지 않았다. concurrency의 목적과 검증은 [별도 절](#concurrency--pr의-중복-검증-취소)에 정리했다.
 
-| 과제의 전략 | 효과 조건("언제 효과 있나") | 판단 | 근거 |
+### job은 둘로, build와 E2E는 같은 job으로
+
+`checks`에는 unit·integration, lint, typecheck를 두고, `build-e2e`에는 production build와 E2E를 뒀다. 두 job은 독립적으로 실행한다.
+
+job마다 준비·설치에 약 20초가 들기 때문에 lint 약 17초나 typecheck 약 5초까지 별도 job으로 나누지는 않았다. 더 잘게 나눴을 때의 전체 시간은 별도로 측정하지 않았다. job 안에서 test와 lint를 동시에 실행하는 방안도 vitest의 CPU 사용량이 높다는 관찰(로컬 약 448%)을 고려해 채택하지 않았다.
+
+build와 E2E는 `.next` 산출물로 연결돼 있다. 별도 job으로 나누면 다시 빌드하거나 artifact로 전달해야 하므로 같은 job에 유지했다. 대신 **Build와 E2E를 별도 step으로 나눠 시간과 실패 위치를 확인**한다. CI의 Playwright `webServer`는 `pnpm start`만 실행한다.
+
+### 추가하지 않은 최적화
+
+- **job 간 setup·install 공유**: 각 job은 별도 VM에서 실행한다. pnpm store 캐시는 두 job에서 복원하되, `node_modules` artifact 전송이나 선행 준비 job은 추가하지 않았다. warm install이 2초인 상황에서 전송·준비 단계를 늘릴 근거가 부족했다.
+- **커스텀 러너 이미지**: 준비 비용을 줄일 수 있지만 개인 레포에서 이미지 관리까지 도입하지 않았다.
+- **Next.js build 캐시**: 측정한 build가 약 11초여서 이번에는 적용 범위를 늘리지 않았다.
+- **검증 축소**: Before와 같은 검증 항목을 유지한다는 측정 조건에 따라 제외했다.
+
+단독 전략별 A/B 실험은 하지 않았다. 아래 After 결과는 세 전략을 함께 적용한 결과이며, 각 전략의 효과는 관련 step의 변화로 해석한다.
+
+workflow 통합과 함께 job timeout을 10분으로 설정했다. Before warm 중앙값 2분 14초의 약 4.5배를 여유로 둔 값이다.
+
+## After — 같은 조건에서 재측정
+
+2026-09-09 측정. 커밋 `5cadb544`, PR #3, run [34357394959](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34357394959)의 attempt 2~7. Before와 동일하게 cold·warm 각 3회를 측정했다.
+
+### 전체 실행 시간 비교
+
+| 조건 | Before 원자료 (중앙값) | After 원자료 (중앙값) | 판정 |
 |---|---|---|---|
-| job 병렬화 | 독립 검증이 한 job에서 직렬 | **채택 (②)** | 정확히 우리 상황 — `pnpm check`가 test 22s·lint 17s를 E2E 뒤 직렬로 합산. 이 44s는 캐시로 줄일 수 없는 실행 시간이라 병렬 배치만이 해법 |
-| concurrency 그룹 | 같은 PR에 연속 push 잦음 | **채택 — 단 wall-clock 축 아님** | 리뷰 중 연속 push가 실제 잦음(upstream PR run 이력으로 실측 예정). 단 단일 run 시간을 줄이는 게 아니라 중복 run을 없애는 것이므로 개선 수치는 "낭비 방지" 축에 분리 기록 |
-| setup-node·pnpm store 캐시 | install이 매번 새로 받는 경우 | **해당 없음 — 이미 적용돼 있음** | 5주차 스타터가 이미 `cache: pnpm`을 걸어둠. Before 측정으로 이 레포에서의 효과가 순이득 ~2s임을 실측(발견 1) — 추가 보강은 무의미해서 안 함 |
+| cold | 144/128/146초 (**144초**) | 94/91/110초 (**94초**) | [128,146]과 [91,110]이 겹치지 않음 — **50초·35% 단축** |
+| warm | 151/132/134초 (**134초**) | 69/83/71초 (**71초**) | [132,151]과 [69,83]이 겹치지 않음 — **63초·47% 단축** |
 
-과제 표 밖에서 병목이 직접 지목한 전략 2종(①브라우저 캐시, ③2차 build 제거)을 추가 채택:
-- ①은 캐시만이 해법(병렬화해도 e2e job 경로에 다운로드 25s가 남음), ③은 ci.yml 삭제와 같은 중복 제거 카테고리(검증 항목 불변 — build는 여전히 1회 검증).
-- 안 고른 조합의 근거: ① 단독은 예상 개선폭이 측정 흔들림과 비슷해 구간 비겹침 판정이 경계선. ② 단독은 브라우저 다운로드 25s가 e2e job에 그대로 남아 효과 반감.
-- 제외한 전략의 근거: pnpm 캐시 보강 — 순이득 ~2s 실측(발견 1)이라 무의미. next build 캐시 — 대상 구간이 11s라 실익 대비 검증 신뢰 리스크. 검증 축소 — 금지.
-- ②의 함정 검증 의무: 각 job의 install 중복 시간을 After에서 실측해 병렬화 이득을 까먹지 않는지 기록한다.
-- 함께 적용(별도 축): ci.yml 삭제(러너 사용량 ×2→×1), concurrency(ref 포함·PR만 취소, 낭비 방지), timeout-minutes 10분(warm 중앙값 2m14s의 ~4배, 측정 기반 산정).
+unit·integration, lint, typecheck, production build, E2E는 Before와 After에서 모두 실행했다. 검증을 제거하거나 축소해 얻은 단축은 없다.
 
-## After (전략 적용 후 측정)
+### 병렬화와 중복 build 제거
 
-## 캐시 hit/miss 증명
+| 관찰 대상 | Before | After |
+|---|---|---|
+| 검증 실행 구조 | `pnpm check`에서 직렬 실행 | `checks` 63~73초 ∥ `build-e2e` 64~104초 |
+| E2E step | 32~33초 — 재빌드 포함 | 20~22초 — 기존 빌드 사용 |
+| Build step | `pnpm check` 내부 11초대 | 독립 step 11~13초 |
 
-### hit (Before warm 측정에서 확보)
+두 job의 실행 구간이 겹치면서 전체 완료 시간은 주로 더 늦게 끝나는 job에 좌우됐다. workflow 전체 시간에는 job 시작 시차 등도 포함되므로 job 소요 시간의 최댓값과 정확히 같지는 않다. E2E의 약 10초 단축은 중복 build 제거의 예상과도 맞았다.
+
+job 분리로 늘어난 설치 비용도 확인했다. warm의 `Install dependencies`는 두 job에서 **각 2초**, 합계 약 4초였다. 이 실행에서는 설치 중복이 전체 시간 단축을 상쇄하지 않았다.
+
+### Playwright 캐시는 유지할 가치가 있었나
+
+같은 After run의 miss attempt 2·3·4와 hit attempt 5·6·7을 비교했다.
+
+| 비교 구간 | 원자료 | 중앙값 |
+|---|---|---|
+| 새 설치: 브라우저 + OS 의존성, 캐시 저장 제외 | 26/27/38초 | **27초** |
+| hit 전체: 캐시 복원 + OS 의존성 + 캐시 후처리 | 14/20/15초 | **15초** |
+
+hit의 구성은 복원 2~7초, OS 의존성 설치 11~13초, 캐시 후처리 0~1초였다. miss에서는 새 설치 외에 캐시 저장 비용 **3~6초**가 추가됐다.
+
+[Playwright 공식 문서](https://playwright.dev/docs/ci#caching-browsers)는 복원 시간이 다운로드 시간과 비슷할 수 있고 Linux의 OS 의존성은 캐시할 수 없다는 이유로 브라우저 캐시를 권장하지 않는다. 사용한다면 Playwright 버전에 맞춰 캐시 키를 구분하도록 안내한다. 현재 구현은 버전 키를 사용하며 hit에서도 `install-deps chromium`을 실행한다.
+
+**새 설치 27초(캐시 저장 제외) 대비 hit 전체 15초로, 설치 관련 구간에서 약 12초의 이득을 관찰해 캐시를 유지했다.** 예상했던 20~25초보다 작았던 이유는 hit에도 OS 의존성 설치가 남기 때문이다. 표본은 각 3회이며 항상 같은 이득을 보장하지 않는다. miss가 잦으면 저장 비용 때문에 손해일 수 있다.
+
+이 비교는 브라우저 바이너리 다운로드만의 시간이 아니라 **설치 관련 구간 전체**의 비교다. 전체 workflow의 단축분에는 pnpm 캐시 상태와 다른 최적화도 영향을 주므로 이를 모두 브라우저 캐시 효과로 계산하지 않는다.
+
+공식 컨테이너 이미지도 검토했지만 이번에는 도입하지 않았다. 이미지 pull 비용과 `.nvmrc`에 맞춘 Node 설정을 추가로 확인해야 하며, 현재 캐시보다 빠른지는 측정하지 않았다.
+
+### 러너 사용 시간 추정
+
+Before는 PR당 quality 약 134초와 `ci.yml` 약 132초를 합쳐 **약 266초**, After는 warm의 `checks` 약 64초와 `build-e2e` 약 65초를 합쳐 **약 130초**로 추산했다.
+
+중복 workflow 삭제와 실행 효율화로 사용 시간도 약 절반으로 줄었다. 이 수치는 대표 소요 시간으로 계산한 추정치이며, 실제 청구 시간을 집계한 값은 아니다.
+
+## 캐시 키 검증 — hit, miss, 원복
+
+### pnpm store의 hit 확인
+
+Before warm에서 다음 로그를 확보했다.
 
 ![warm attempt의 캐시 복원과 install 재사용](../images/week10-cache-hit-warm.png)
 
-- warm attempt의 "Set up Node.js" step: `Cache hit for: node-cache-Linux-x64-pnpm-ea3717af…`, `Cache Size: ~198 MB`, 그리고 **`Cache restored from key: …`** — 과제 예시 문구 그대로. 이어지는 "Install dependencies"는 `reused 540, downloaded 0`으로 **2s**
-- 대조: cold attempt 2(캐시 삭제 직후) 같은 step: `pnpm cache is not found` → install은 `downloaded 540`으로 6~7s
-- hit/miss install 시간 차: **4~5s** (발견 1과 동일 수치)
+| 관찰 지점 | warm | cold — attempt 2 |
+|---|---|---|
+| Set up Node.js | `Cache hit for: node-cache-Linux-x64-pnpm-ea3717af…`, 약 198MB 복원 | `pnpm cache is not found` |
+| Install dependencies | `reused 540, downloaded 0` — 2초 | `downloaded 540` — 6~7초 |
 
-### miss — lockfile 변조 재현 (티켓 05에서 수행 예정)
+install step에서 관찰한 차이는 4~5초다. 캐시 복원과 저장 비용은 이 차이에 포함하지 않는다.
 
-## concurrency (낭비 방지)
+### lockfile 변경으로 miss 재현
+
+2026-09-09, 커밋 `7b1c55a5`에서 lockfile 끝에 YAML 주석 한 줄을 추가했다. 의존성 정의는 유지하면서 파일 내용의 해시만 바꾸기 위해서다. `--frozen-lockfile` 검증도 통과했다.
+
+변경 후 run [34363213822](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34363213822)에서 다음을 확인했다.
+
+| 관찰 지점 | 기존 warm | lockfile 변경 후 |
+|---|---|---|
+| Set up Node.js | `Cache hit for: node-cache-…` | `pnpm cache is not found` |
+| Install dependencies | `reused 540, downloaded 0` — 2초 | `reused 0, downloaded 540` — 6.4초 |
+
+같은 run의 브라우저 캐시는 `playwright-browsers-Linux-1.61.1` 키로 hit했다. lockfile 주석 변경으로 Playwright 버전은 바뀌지 않았으므로, pnpm store만 miss가 발생했다.
+
+커밋 `a098c839`에서 주석을 제거한 뒤 run [34363761765](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34363761765)이 green으로 끝났고 install도 **2초로 복귀**했다. 이 실험으로 lockfile 내용이 pnpm store 캐시 키에 반영되며, 브라우저 캐시는 별도의 버전 키를 사용함을 확인했다. 실험용 주석은 남아 있지 않다.
+
+## concurrency — PR의 중복 검증 취소
+
+### 이벤트별 정책
+
+| 이벤트 | group 예시 | 동작 |
+|---|---|---|
+| PR push | `Quality-refs/pull/N/merge` | 같은 PR의 이전 run을 취소하고 최신 변경 검증 |
+| main push | `Quality-<run_id>` | 서로 다른 그룹으로 독립 실행, 후속 push에 의한 concurrency 취소 방지 |
+
+`cancel-in-progress: false`만으로는 같은 그룹의 대기 run까지 보호할 수 없다. 기본 큐에서는 한 run이 실행 중이고 다른 run이 대기할 때 세 번째 run이 들어오면 기존 대기 run을 대체한다. main에는 서로 다른 `run_id`를 사용해 이 충돌을 피했다.
+
+GitHub은 `queue: max`로 여러 run을 대기시키는 방식도 지원한다. 다만 현재 검증은 독립된 러너와 로컬 서버에서 실행하므로 직렬로 대기시킬 필요가 없다. 이 정책은 배포 순서를 제어하는 설정과는 별개다. [GitHub concurrency 문서](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
+
+### main의 각 push를 검증하는 이유
+
+최신 run만으로도 최신 코드의 상태는 확인할 수 있다. 이 프로젝트에서는 PR의 핵심 E2E를 main의 전체 E2E로 보완할 계획이므로, 각 push의 검증 결과를 남기기로 했다. 실패 원인인 머지를 찾거나 flaky 결과를 대조할 때도 도움이 된다.
+
+이는 머지된 코드의 검증 기록이며, 실제 Production 배포 환경을 테스트했다는 뜻은 아니다. main run을 모두 유지하면 그만큼 러너를 사용한다. 현재 규모에서는 이를 수용하되, 머지 빈도가 높아지면 최신 run만 검증하는 정책과 다시 비교한다.
+
+### 도입 근거와 검증 범위
+
+“연속 push가 잦다”는 초기 가정과 달리, upstream round-6~9 브랜치의 **32 run 중 겹침은 2건**이었다. 큰 절감 효과를 입증한 것은 아니다. 기존 workflow에 간단한 설정을 추가해 연속 push 때의 중복 검증을 줄이는 목적으로 유지했다.
+
+PR의 이전 run 취소는 문서 마감 커밋 두 건을 시차를 두고 push해 재현했다. 취소된 run 목록 캡처는 PR 본문에 첨부했다. main은 비취소를 별도로 실측하지 않았으며, 서로 다른 그룹을 사용한다는 설정 근거로 판단했다. 후속 main push에 의한 concurrency 취소는 피하지만, 수동 취소나 timeout까지 막는 것은 아니다.
