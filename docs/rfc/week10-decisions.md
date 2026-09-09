@@ -59,7 +59,7 @@
 - **결정**: (1) `retries: process.env.CI ? 2 : 0` — 로컬 0(흔들림 즉시 노출), CI 2회. Playwright가 재시도 후 성공을 "flaky"로 별도 표기 → 재시도 자체가 흔들림/진짜 실패의 구분 장치. (2) flaky 발생이 로그 안 열고 보이게 리포트 노출. (3) 같은 스펙 2회 이상 flaky 기록 시 `test.fixme` 격리 + 이슈 기록 — 만성 흔들림 은폐 방지 상한. (4) CI 한정 `trace: retain-on-failure` — flaky 원인 사후 분석용 증거 수집.
 - **검토 후 제외 (판단 흔적)**: 타임아웃 연장(진짜 실패 판명 지연), quarantine 별도 트랙(스펙 5개 규모에 과함), 개별 재시도(어떤 스펙이 흔들릴지 겪은 후 좁히는 게 순서), 재시도 0+수동 재실행(구분이 기록에 안 남음). 자동 대기 준수는 flaky 발생 시 1차 수리 방법으로 정책에 한 줄 명시.
 
-## ADR-9. Vercel 배포: fork 연결, Production 브랜치 = feat/round-10
+## ADR-9. Vercel 배포: fork 연결, Production 브랜치 = main (기본값)
 
 - **상태**: 합의 (2026-09-09)
 - **결정 (2026-09-09 개정)**: Vercel(heeji289@gmail.com 계정)을 fork에 연결. **Production 브랜치 = `main` 기본값 그대로** — 최초 통합 PR(feat/round-10→main) 이후 main이 작업 최신 상태이므로 브랜치 지정 우회 불필요. 실험 브랜치·fork 내부 PR은 Preview 자동 배포.
