@@ -131,6 +131,23 @@ Before와 After 모두 unit·integration / lint / typecheck / production build /
 - 대조: cold attempt 2(캐시 삭제 직후) 같은 step: `pnpm cache is not found` → install은 `downloaded 540`으로 6~7s
 - hit/miss install 시간 차: **4~5s** (발견 1과 동일 수치)
 
-### miss — lockfile 변조 재현 (티켓 05에서 수행 예정)
+### miss — lockfile 변조 재현 (2026-09-09 수행)
+
+**목적**: "캐시가 걸려 있다"에서 멈추지 않고, **캐시 키가 정말 lockfile에 결박돼 있는지를 반대 방향(일부러 깨기)으로 증명**한다.
+
+**원리**: pnpm store 캐시의 키는 lockfile 내용의 해시(지문)다. 파일이 한 글자만 바뀌어도 지문이 달라져 CI는 기존 캐시를 찾지 못한다. 그래서 lockfile 끝에 **YAML 주석 한 줄**만 추가했다(실험 커밋 7b1c55a5) — 주석은 설치 의미에 영향이 없어 `--frozen-lockfile`을 통과하지만 지문은 바뀐다. 설치 동작은 안 건드리고 키만 바꾸는 안전한 변조.
+
+**결과** — miss run [34363213822](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34363213822):
+
+| 관찰 지점 | hit (평소 warm) | miss (변조 후) |
+|---|---|---|
+| Set up Node.js 로그 | `Cache hit for: node-cache-…` | **`pnpm cache is not found`** — 새 지문으로 찾으니 없음 |
+| Install dependencies | `reused 540, downloaded 0` — 2s | **`reused 0, downloaded 540`** — 6.4s, 전량 재다운로드 |
+
+**키 격리 증거**: 같은 run에서 브라우저 캐시는 `Cache hit ... playwright-browsers-Linux-1.61.1`로 **멀쩡히 hit** — 키를 lockfile이 아닌 playwright 버전으로 만들었기 때문. 변조가 **깨려던 캐시만 정확히** 깼다는 뜻으로, 두 캐시의 키 설계가 서로 독립적으로 유효함을 덤으로 증명한다.
+
+**원복**: 커밋 a098c839로 주석 제거 → run [34363761765](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34363761765) green, install **2s 복귀** — 지문이 되돌아오니 기존 캐시를 다시 찾는다. 실험 잔재 없음.
+
+**요약**: 키를 깨면 miss(전량 재다운로드), 되돌리면 hit(전량 재사용) — **"캐시 키 = lockfile 지문" 결박을 양방향으로 증명했다.**
 
 ## concurrency (낭비 방지)
