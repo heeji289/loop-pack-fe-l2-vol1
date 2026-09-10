@@ -208,8 +208,6 @@
   .summary {
     position: fixed;
     inset: auto 0 0;
-    /* CI 실험 전용: 모바일 구매 영역을 화면 밖으로 밀어낸다. 병합 전 제거. */
-    transform: translateY(100%);
     z-index: 10;
     width: 100%;
     height: calc(var(--purchase-bar-height) + env(safe-area-inset-bottom));
