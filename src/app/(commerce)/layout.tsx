@@ -8,6 +8,7 @@ import { CartCount } from '@/entities/cart';
 import { sessionQueries } from '@/entities/session';
 import { WishlistCount } from '@/entities/wishlist';
 import { SessionMenu } from '@/features/auth';
+import { CurrencySelect } from '@/features/product';
 import { makeQueryClient } from '@/shared/query-client';
 
 /**
@@ -39,6 +40,7 @@ export default async function CommerceLayout({
               <Link href="/cart">
                 <CartCount />
               </Link>
+              <CurrencySelect />
               <SessionMenu />
             </div>
           </header>
