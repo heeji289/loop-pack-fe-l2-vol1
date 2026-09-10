@@ -1,7 +1,7 @@
 name: Quality
 
 # 실행 정책:
-# - 모든 PR: lint·typecheck·unit 전체·CLI integration 전체·변경 관련 앱 integration·env 검증→production build
+# - 모든 PR: lint·typecheck·unit 전체·CLI integration 전체·변경 관련 앱 integration·빌드용 env 검증→production build→서버 env 실행 검사
 #   (CI는 .env.example 값으로 검증하고, 배포로 이어지는 Vercel 원격 빌드가 각 환경의 실제 값으로 재검증)
 # - main 대상 · non-draft · 런타임 변경 PR: + 핵심 E2E(@critical 3개)
 # - main push: 전체 검증(통합·E2E 5종) 성공 후 같은 SHA를 Production에 배포
@@ -211,16 +211,19 @@ jobs:
       - name: Install Playwright OS deps
         if: steps.e2e-scope.outputs.browsers == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
-      # pnpm build는 env 검증(validate-env.mjs) 성공 후에만 next build를 시작한다.
+      # pnpm build는 next.config의 빌드용 env 검증 후 production build를 진행하고,
+      # build 후에는 기존 산출물로 서버 env 실행 검사를 한다 — draft·문서 전용도 실행한다.
       # 이 빌드는 배포되지 않아 로컬 템플릿(.env.example) 값으로 검증 경로까지 실행한다
       # — 새 변수는 템플릿·스키마만 고치면 되고, 템플릿이 낡으면 이 빌드가 실패해 드러난다.
-      # 배포로 이어지는 빌드(Preview·Production 모두 Vercel 원격 빌드)는
-      # 각 환경의 실제 값으로 재검증한다.
+      # 배포 빌드는 실제 빌드용 값으로, 서버 시작은 instrumentation에서 실제 서버용 값으로 검증한다.
       - name: Build
         id: build
         run: |
           cp .env.example .env
           pnpm build
+          printf '## env 검증: PASS (build/local)\n\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Server env lifecycle
+        run: node scripts/week-10-ci/check-env-lifecycle.mjs
       - name: Core E2E (@critical)
         id: core-e2e
         if: steps.e2e-scope.outputs.core == 'true'
