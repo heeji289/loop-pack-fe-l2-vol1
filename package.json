@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/week-10-ci/validate-env.mjs && next build",
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -18,7 +18,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run --project unit-node --project unit-jsdom",
-    "test:integration": "vitest run --project integration-node --project integration-jsdom",
+    "test:integration": "vitest run --project integration-node --project integration-jsdom --project integration-cli",
+    "test:integration:cli": "vitest run --project integration-cli",
     "test:e2e": "playwright test",
     "test:mutation": "stryker run",
     "check": "pnpm test && pnpm lint && pnpm typecheck && pnpm build && pnpm test:e2e",
@@ -45,6 +46,7 @@
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",
     "@eslint/js": "^10.0.1",
+    "@next/env": "^16.3.4",
     "@next/eslint-plugin-next": "16.2.10",
     "@playwright/test": "^1.61.1",
     "@stryker-mutator/core": "^10.0.0",
@@ -76,6 +78,7 @@
     "tailwindcss": "^4.3.2",
     "typescript": "^5",
     "typescript-eslint": "^8.63.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "zod": "^4.6.1"
   }
 }
