@@ -37,6 +37,7 @@
 ## 코드 규칙
 
 - 코드 작성은 @CONVENTIONS.md 를 따른다.
+- 테스트를 쓰면 [testing.md](.claude/rules/testing.md), 화면을 그리면 [rendering.md](.claude/rules/rendering.md), 성능을 이유로 들면 [performance.md](.claude/rules/performance.md)를 함께 읽는다.
 
 ## 명령어
 
@@ -48,5 +49,6 @@
 | `pnpm build`         | 프로덕션 빌드                |
 | `pnpm start`         | 빌드 결과 실행               |
 | `pnpm lint`          | ESLint 검사                  |
+| `pnpm typecheck`     | 타입 검사                    |
 | `pnpm test`          | 단위·통합 테스트             |
 | `pnpm test:mutation` | 뮤테이션 테스팅 (수동, 느림) |
