@@ -173,6 +173,14 @@ A11·R23은 [e2e-scope-review](../../.claude/skills/e2e-scope-review/SKILL.md)�
 
 검수 기록은 [05-test-design-checks](../../.scratch/week10-step4-5-ai-review-and-rule-promotion/verification/05-test-design-checks.md)에 있다. 대표 테스트 하나는 구현을 실제로 깨뜨려 검출을 확인했다(6 failed → 원복 후 18 passed). E2E 고정 sleep과 `scripts`·`e2e`의 테스트 무력화 차단은 4단계에서 문장 규칙까지만 두고 **5단계 승격 후보**로 남긴다.
 
+### CI·workflow 검토 (티켓 07)
+
+| ID | 판정 | 정본 | 읽히는 경로 | 결정 근거 |
+| --- | --- | --- | --- | --- |
+| A13 · R29 | 신규 | `.claude/skills/workflow-review/SKILL.md` | AGENTS.md 코드 규칙의 스킬 포인터 + description 트리거 | 다섯 관점(병합 방어·concurrency·캐시/path filter·required와 생략·최소 권한/secrets)은 과제 예시를 그대로 쓰고, 판정 기준을 YAML 문면이 아니라 호출 스크립트·branch protection 설정·실제 run 증거에 뒀다. CI 실행 정책의 정본은 이미 workflow 주석·ADR·week10-ci.md에 있어 별도 rule 파일로 복사하지 않았다 — 스킬에는 검토 계약(입력과 실행 코드 출처, 실패·취소·정상 생략·0개 실행·미완료 구별, 동일 SHA 대조, 근거 없는 실행 보장은 보류)만 둔다 |
+
+최종 workflow 리뷰는 [07-workflow-checks](../../.scratch/week10-step4-5-ai-review-and-rule-promotion/verification/07-workflow-checks.md)에 있다. 수용 2건(트리의 낡은 `pr-review.mjs` 사본, `decide-e2e-scope`·`pr-comment.yml`의 main 미이관 — 둘 다 작성자 결정 대기), 반려 2건, 보류 1건(schedule cron 첫 발화 증거 — 2026-09-14 확인). 정상 생략·입력 부족 사례의 산출 형태도 같은 기록에서 검수했다.
+
 ## 현재 연결에서 확인한 구체적인 빈틈
 
 1. **테스트 검사 범위 불일치.** testing rule과 test-review의 테스트 파일 범위에는 `scripts/**/*.test.*`가 빠져 있다. ESLint의 Vitest 특화 규칙도 `{src,tests}/**/*.test.*`에만 적용된다. E2E가 test-review 대상이라는 사실과 skip/only/truthiness가 E2E에서도 lint로 차단된다는 것은 별개다. 기존 E2E 결과 검사는 실행 수/상태를 검사하지만 모든 테스트 코드 패턴의 정적 검사를 대체하지 않는다. test-review는 의도 출처에서 정적 검사 조건을 제외하므로, 새 CI/룰 회귀 검수에서는 **검사기의 입력 → 진단/exit code도 공개 동작으로 검토**하도록 적용 계약을 보완해야 한다. → 티켓 05에서 닫았다(아래 배치 결정). 다만 `src/app/api/**`는 truthiness 조항만 꺼져 있고 나머지 Vitest 규칙은 걸린다는 점을 이 문단이 뭉뚱그렸다 — 정확한 범위는 `eslint.config.mjs`가 정본이다.
