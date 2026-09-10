@@ -1,5 +1,5 @@
-// PR의 런타임 변경에 관련된 integration 테스트만 실행한다.
-// unit 전체는 이 스크립트 밖(workflow의 pnpm test:unit)에서 항상 실행된다.
+// PR의 런타임 변경에 관련된 앱 integration 테스트만 실행한다.
+// unit·CLI integration 전체는 workflow의 별도 단계에서 항상 실행된다.
 //
 // 모드 결정:
 // - skip: 런타임 변경 0개(문서 전용) — 판별 성공과 생략 이유를 기록한다.
@@ -84,7 +84,7 @@ if (runtimeFiles.length === 0) {
 
 const runFull = (reason) => {
   writeSummary(`## 관련 integration: 전체 폴백\n\n${reason}\n`);
-  process.exit(runPnpm(['test:integration']));
+  process.exit(runPnpm(['exec', 'vitest', 'run', ...INTEGRATION_PROJECTS]));
 };
 
 const fullImpact = runtimeFiles.filter((file) =>
