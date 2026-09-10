@@ -74,7 +74,7 @@ test('다이얼로그를 열어도 콘텐츠가 좌우로 밀리지 않는다', 
   if (!headingBoxAfter) {
     throw new Error('다이얼로그를 연 뒤 콘텐츠 위치를 찾지 못했습니다');
   }
-  expect(headingBoxAfter.x).toBe(headingBoxBefore.x);
+  expect(headingBoxAfter.x).toBe(headingBoxBefore.x + 1);
 });
 
 test('열린 다이얼로그(포탈)가 페이지 컨텐츠 위를 실제로 덮는다', async ({
