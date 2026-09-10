@@ -108,3 +108,5 @@ export const handlers = [
   }),
   http.post('*/api/auth/logout', () => new HttpResponse(null, { status: 204 })),
 ];
+
+// CI 전체 폴백 실증용 임시 주석 — 실험 종료 시 브랜치 폐기
