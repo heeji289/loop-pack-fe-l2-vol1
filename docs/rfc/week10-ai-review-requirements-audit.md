@@ -139,6 +139,23 @@ FSD는 이미 있는 architecture-review/ESLint를 정본으로 연결한다. �
 
 `.claude/rules/`가 자동으로 읽힌다고 가정하지 않기 위해 AGENTS.md 코드 규칙에 세 규칙 파일을 조건과 함께 한 줄로 걸어, Codex도 같은 경로로 찾게 했다.
 
+### 상태·데이터·인증 (티켓 04)
+
+| ID | 판정 | 정본 | 읽히는 경로 | 결정 근거 |
+| --- | --- | --- | --- | --- |
+| A04 | 신규 | `.claude/skills/state-design-review/SKILL.md` | AGENTS.md 코드 규칙의 스킬 포인터 + description 트리거 | 코드를 쓰지 않고 전제·반례·미결정만 낸다. 입력은 분류 표·파일 지정·`git diff` 셋 다 받고, 코드에서 뽑은 표에는 근거를 붙인다. 채택은 작성자가 한다 |
+| R06 | 신규 | `state-data.md` 「원본의 위치가 도구를 정한다」 + `state-design-review` | AGENTS.md 코드 규칙의 규칙 파일 포인터 | 발제 5주차의 축(원본으로 도구를 정하고 수명·공유 범위로 검증, 서버→URL→남은 것 순으로 소거)을 그대로 쓰고, 분류 표는 양식이며 근거 칸이 본체라는 점을 명시했다 |
+| R05 | 보완 | `state-data.md` 「서버 상태는 내 상태가 아니라 캐시다」 | 위와 같음 | API 순수성 자체는 CONVENTIONS 3장이 정본이라 복사하지 않고, 이 규칙에는 Query 옵션·표시 모델 경계와 "조회 컴포넌트의 Query Hook 사용은 정상"만 남겼다 |
+| R07 | 신규 | `state-data.md` 「서버 상태는 내 상태가 아니라 캐시다」 | 위와 같음 | queryKey는 queryFn의 의존성이라는 발제 조항. 쿠키는 예외로 열었고, 인라인 객체 금지·staleTime 명시 강제는 채택하지 않고 상속을 정상으로 뒀다 |
+| R08 · R17 | 신규 | `state-data.md` 「서버가 채우고 클라이언트가 이어받는다」 | 위와 같음 | 요청별 client, 브라우저 client 수명, HydrationBoundary 이어받기, 서버 호출 수 세기, 메타데이터 상속과 0건 구별 |
+| R09 | 신규 | `state-data.md` 「낙관적 갱신은 캐시를 잠깐 빌리는 것이다」 + 「서버 상태는 내 상태가 아니라 캐시다」 | 위와 같음 | 빌리고·되돌리고·돌려주고, 무효화는 기다린다, 낙관이 정당화되는 자리는 롤백이 화면 안에서 끝나는 곳. 세션 전환 시 취소→제거→교체 순서도 여기 있다 |
+| R10 | 신규 | `state-data.md` 「URL 상태」 | 위와 같음 | parser 한 곳 검증, push/replace 구분, 조건 변경 시 페이지 초기화, 초안과 확정값 구분 |
+| R11 | 신규 | `state-data.md` 「저장해 두는 상태」 | 위와 같음 | 저장값 검증, version·migrate 분담, 복원 전과 값 없음 구별, selector 범위, 계정 범위 잔존 판단 |
+| R24 | 기존 위임 | `rendering.md`(401 처리 위치) · `self-review` 네 축(입력 신뢰 경계) · `state-data.md`(세션 전환 시 캐시 정리) | 각 파일의 기존 경로 | 별도 auth 규칙 파일을 만들었다가 지웠다. 조항 대부분이 위 셋과 중복이었고, 남는 것은 정리 순서 한 줄뿐이라 `state-data.md`로 옮겼다 |
+| R25 | 부분 위임 | `src/analytics/events.ts`의 유니온 타입 + `self-review` 네 축(입력 신뢰 경계) | 컴파일 · `/self-review` | 이름·props 조합은 타입이 막고, 민감 정보는 self-review가 밖으로 나가는 값으로 본다. 발행 위치와 중복 발행은 규칙 없이 남겼다 — 계측을 새로 붙일 때만 걸리는데 이 저장소에 그 작업이 없다 |
+
+이 티켓의 규칙은 `state-design-review`가 판정 기준으로 읽고, 코드 변경에서는 AGENTS.md 포인터로 걸린다. 작업 중 `architecture-review`의 `app/api` 공인 예외가 `proxy.ts`와 두 파일의 테스트를 빠뜨린 것을 발견해 함께 고쳤다 — A06은 티켓 03 소유이므로 그 행의 사실 정정으로 본다. 검수 기록은 [04-state-auth-checks](../../.scratch/week10-step4-5-ai-review-and-rule-promotion/verification/04-state-auth-checks.md)에 있다.
+
 A11·R23은 [e2e-scope-review](../../.claude/skills/e2e-scope-review/SKILL.md)로 구현하고 AGENTS.md에서 연결한다.
 
 ## 현재 연결에서 확인한 구체적인 빈틈

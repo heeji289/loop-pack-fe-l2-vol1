@@ -36,7 +36,7 @@ description: src 폴더 구조를 FSD 레이어 기준으로 점검한다. 각 �
 - shared는 index 없이 파일 경로로 직접 import한다.
 - 루트 `tests/`는 레이어 밖 통합 테스트 자리다. 레이어 규칙을 적용하지 않는다.
 - `src/app/api`는 mock 백엔드(네트워크 건너편)라 점검 대상이 아니다. 단, 프론트 코드가 이를 import하면 위반이다.
-- 예외는 `src/app/server-session.ts` 하나다. 첫 HTML이 `/api/auth/me`와 같은 세션 판정을 내야 하는데 토큰 계약이 수정 금지인 mock 백엔드에만 있어, 이 파일만 `app/api/_data`의 세션 판독을 직접 쓴다(2026-09-10 수용). 다른 파일이 같은 import를 하면 위반이다.
+- 예외는 `src/app/server-session.ts`와 `src/proxy.ts` 둘이다. 서버 렌더와 proxy가 `/api/auth/me`와 같은 세션 판정(서명·만료까지)을 내야 하는데 토큰 계약이 수정 금지인 mock 백엔드에만 있어, 이 두 파일만 `app/api/_data`의 세션 판독을 직접 쓴다(2026-09-10 수용). 그 둘의 테스트도 같은 계약을 검증하느라 함께 쓴다. 그 밖의 파일이 같은 import를 하면 위반이다.
 - features 슬라이스 이름은 기능이 다루는 도메인 대상(product, cart, wishlist)으로 짓는다.
 
 ## 차단 범위와 판단 범위
