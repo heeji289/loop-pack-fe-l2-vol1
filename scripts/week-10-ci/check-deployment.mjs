@@ -25,10 +25,19 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   try {
-    const deployment = new URL(process.argv[2]);
-    assert.equal(deployment.protocol, 'https:');
-    assert.equal(deployment.hostname.endsWith('.vercel.app'), true);
-    assert.equal(deployment.href, `${deployment.origin}/`);
+    let deployment;
+    try {
+      deployment = new URL(process.argv[2]);
+    } catch {
+      throw new Error('배포 URL 누락 또는 형식 오류');
+    }
+    assert.equal(
+      deployment.protocol === 'https:' &&
+        deployment.hostname.endsWith('.vercel.app') &&
+        deployment.href === `${deployment.origin}/`,
+      true,
+      '배포 URL은 경로·인증정보 없는 HTTPS Vercel 주소여야 한다',
+    );
     // VERCEL_TOKEN은 CLI가 env에서 읽는다. --token은 curl 옵션으로 전달되므로 넣지 않는다.
     const result = spawnSync(
       'pnpm',
@@ -51,8 +60,24 @@ if (
       { encoding: 'utf8', timeout: 60_000 },
     );
     if (result.error || result.status !== 0) {
+      // 외부 CLI 원문에는 인증값이 섞일 수 있어 원인 분류와 종료 정보만 남긴다.
+      let reason = 'CLI 실행';
+      if (
+        /unauthorized|forbidden|authentication|invalid token/i.test(
+          result.stderr ?? '',
+        )
+      )
+        reason = '인증';
+      else if (
+        /resolve host|connect|timed? out|timeout|network/i.test(
+          result.stderr ?? '',
+        )
+      )
+        reason = '네트워크';
+      else if (/unknown|unrecognized|invalid option/i.test(result.stderr ?? ''))
+        reason = 'CLI 인수';
       throw new Error(
-        '후보 API 요청 실패 — 네트워크·인증·CLI 실행 로그를 확인한다',
+        `후보 API 요청 실패 — ${reason} (exit ${result.status ?? '없음'}, signal ${result.signal ?? '없음'}, code ${result.error?.code ?? '없음'})`,
       );
     }
     const separator = result.stdout.lastIndexOf('\n');
@@ -65,13 +90,13 @@ if (
     if (process.env.GITHUB_STEP_SUMMARY)
       appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
   } catch (error) {
-    console.error(
-      error instanceof Error ? error.message : '배포 후보 검증 실패',
-    );
+    const reason =
+      error instanceof Error ? error.message : '배포 후보 검증 실패';
+    console.error(reason);
     if (process.env.GITHUB_STEP_SUMMARY)
       appendFileSync(
         process.env.GITHUB_STEP_SUMMARY,
-        '## 배포 후보 검증: FAIL\n\n승격하지 않는다.\n',
+        `## 배포 후보 검증: FAIL\n\n${reason}\n\n승격하지 않는다.\n`,
       );
     process.exitCode = 1;
   }

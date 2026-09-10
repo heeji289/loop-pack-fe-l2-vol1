@@ -28,7 +28,7 @@ const INTEGRATION_DOM_TESTS = [
 ];
 
 const INTEGRATION_CLI_TESTS = [
-  'scripts/week-10-ci/validate-env.test.ts',
+  'scripts/week-10-ci/check-env-build.test.ts',
   'scripts/week-10-ci/check-budget.test.ts',
   'scripts/week-10-ci/pr-comment.test.ts',
 ];
