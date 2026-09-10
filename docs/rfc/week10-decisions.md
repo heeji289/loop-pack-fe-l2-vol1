@@ -92,7 +92,12 @@
 - **범위**: 기존 변경 판별을 재사용한다. 코드·설정·설계 문서·규칙 변경은 리뷰하고 일반 안내 문서는 사람 검토로 넘긴다. 기준의 정본은 복사하지 않고 base에서 읽는다.
 - **한도**: 모델 호출 1회·출력 6,000토큰·3분·입력 1MiB, 자동 재시도 없음. 같은 base/head는 댓글 예약으로 중복을 막고 AI workflow의 수동 재실행 1회만 허용한다. 작은 저장소의 소스·테스트를 함께 제공하며 상한 초과는 잘라서 성공시키지 않는다. 이 한도는 금액 상한이 아니다. API 사용량·프로젝트 한도는 작성자가 확인한다.
 - **결과**: SHA·기준/프롬프트 해시·읽은 기준·실행 링크와 함께 PR 댓글에 남긴다. 인증·수집·입력·응답·시간·게시 실패는 지적 없음과 구별한다. 비결정적 결과이므로 required·guard·배포 조건에 넣지 않고 수용·반려는 작성자가 결정한다.
-- **활성화**: API 프로젝트 키를 저장소 secret `OPENAI_API_KEY`에 등록하고 workflow를 default branch에 반영한다. 저장소 secret 등록과 [PR #24](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/24)의 default branch 반영을 확인했다. 실제 모델 응답과 PR 댓글 게시를 검증한다.
+- **활성화·검증**: 저장소 secret 등록과 [PR #24](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/24)·[수정 PR #26](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/26)의 main 반영을 확인했다. [실제 리뷰](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/25#issuecomment-5622602438)에서 기준 6개 읽기 응답과 댓글 게시를 확인했다. 외부 GitHub 상태는 입력만으로 확인할 수 없어 `partial`로 남겼다.
+
+첫 AI 리뷰 댓글 기록. 처음의 기준 경로 응답 형식 오류를 수정했고, 재실행 제한·오래된 결과 게시 차단의 실행 근거는 [PR #25](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/25)에 남겼다.
+
+![첫 AI PR 리뷰 댓글](images/week10-ai-review-first-comment.png)
+
 
 ## ADR-12. required 선정: main 핵심 E2E와 Production 전체 E2E 분리
 
