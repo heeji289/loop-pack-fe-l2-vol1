@@ -55,11 +55,11 @@ merge queue 대신 main의 required checks를 strict로 설정한다. 다른 PR�
 | draft PR 또는 문서 전용 PR | 전체 | 변경 관련 | 실행 | 생략 | 생략 | 없음 |
 | main 병합 후 배포 파이프라인 | 전체 | 전체 | 실행 | 전체 | 생략 | 모든 필수 검증 성공 후 |
 | 주 1회 schedule | 전체 | 전체 | 실행 | 전체 | 실행 | 없음 |
-| 검증용 workflow_dispatch | 전체 | 전체 | 실행 | 전체 | 실행 | 없음 |
+| 검증용 workflow_dispatch (선택한 브랜치) | 전체 | 전체 | 실행 | 전체 | 실행 | 없음 |
 
 - **핵심 E2E 조건은 main 대상 AND non-draft AND 런타임 관련 변경이다.** 문서 전용·draft·main 외 PR은 브라우저 준비와 E2E를 생략한다. lint·typecheck·unit 전체·관련 integration과 build는 draft에서도 유지한다.
 - PR base 변경과 draft 상태 변경을 재판정한다. `edited`·`ready_for_review`·`converted_to_draft`를 기존 PR 이벤트에 포함한다. main 대상 변경이나 ready 전환 후 이전 생략 성공으로 병합하지 않도록 실제 상태 전환 PR로 검증한다.
-- 기본 정기 주기는 기존 주 1회를 유지한다. 매주 월요일 03:17 KST(일요일 18:17 UTC, cron `17 18 * * 0`)에 main을 검증한다. 수동 실행도 같은 검증을 수행하며 배포를 호출하지 않는다.
+- 기본 정기 주기는 기존 주 1회를 유지한다. 매주 월요일 03:30 KST(일요일 18:30 UTC, cron `30 18 * * 0`)에 main을 검증한다. 수동 실행은 선택한 브랜치에서 같은 검증을 수행하며 배포를 호출하지 않는다.
 - PR 연속 push는 낡은 run을 취소한다. main의 커밋별 검증은 1단계의 독립 run 정책을 유지한다. Production 게시 순서는 별도로 보호해, 오래된 run의 늦은 완료가 최신 배포를 덮지 않게 한다.
 - production build와 해당 E2E는 가능한 한 같은 job에서 이어 실행한다. 로컬 `pnpm check`와 전체 테스트 명령은 전체 검증으로 유지한다.
 
@@ -112,7 +112,7 @@ merge queue 대신 main의 required checks를 strict로 설정한다. 다른 PR�
 
 ### 정기 E2E·Lighthouse CI
 
-- 정기·수동 실행은 main의 전체 E2E와 Lighthouse CI 측정·리포트 업로드를 수행한다. 기본 Lighthouse CI 연결은 2단계에 포함하고, 7주차 측정에 근거한 assertion 임계값은 3단계에서 적용한다.
+- 정기 실행은 main, 수동 실행은 선택한 브랜치의 전체 E2E와 Lighthouse CI 측정·리포트 업로드를 수행한다. 수동 실행은 작업 브랜치의 전체 흐름과 성능을 병합 전에 확인할 수 있도록 main으로 제한하지 않는다. 기본 Lighthouse CI 연결은 2단계에 포함하고, 7주차 측정에 근거한 assertion 임계값은 3단계에서 적용한다.
 - 대상은 현재 구현된 홈·상품 목록 화면이다. 각 3회 측정하고 중앙값과 원자료를 남긴다. Lighthouse는 변동성이 있어 PR required나 Production 배포 게이트로 사용하지 않는다.
 - 정기 실행이 default branch에 반영되어 실제 schedule로 실행된 증거를 남긴다. 첫 정기 실행 전에는 대기 상태로 표시하고 수동 실행을 schedule 실행 증거로 대신하지 않는다.
 
@@ -153,7 +153,7 @@ merge queue 대신 main의 required checks를 strict로 설정한다. 다른 PR�
 | main 갱신 후 재검증 | A·B PR 검증 성공 후 A를 먼저 병합하면 B가 최신 main 미반영으로 차단됨. B를 갱신하면 새 SHA의 CI가 실행되고 required 통과 후 병합 가능. 갱신 전후 base/head SHA·run URL·PR 상태 기록 |
 | required 실패 | 핵심 E2E·관련 integration·판별 실패를 각각 재현해 main 병합 차단. 최신 SHA·required 설정·PR 상태 기록 |
 | Production 게이트 | 비핵심 E2E 실패 시 배포 단계 미실행·기존 Production 유지. 정상 run은 전체 E2E 성공 후 동일 SHA 배포 |
-| 정기·수동 | 전체 E2E 5종과 Lighthouse 홈·상품 목록 리포트 확인. 배포 없음. 실제 첫 schedule run도 확인 |
+| 정기·수동 | main 및 작업 브랜치의 수동 실행에서 전체 E2E와 Lighthouse 홈·상품 목록 리포트 확인. 선택한 ref·SHA·run URL 기록, 배포 없음. main의 실제 첫 schedule run도 확인 |
 | flaky | 일회성 실패는 retry 후 flaky, 지속 실패는 2회 retry 후 failed. 리포트·실패 trace 확인 |
 | 비용 | 전체 대비 unit 전체+관련 integration 각 3회, 선택 목록·raw 시간·중앙값·범위·판별 비용 기록 |
 | 정리 | 실패 실험·강제 retry 코드를 원복하고 최종 `pnpm check` 통과 |
