@@ -40,6 +40,7 @@
 - 테스트를 쓰면 [testing.md](.claude/rules/testing.md), 화면을 그리면 [rendering.md](.claude/rules/rendering.md), 성능을 이유로 들면 [performance.md](.claude/rules/performance.md)를 함께 읽는다.
 - 상태나 캐시를 손대면 [state-data.md](.claude/rules/state-data.md)를 함께 읽는다.
 - E2E 범위를 정하거나 포함·제외 근거를 검토하면 [e2e-scope-review](.claude/skills/e2e-scope-review/SKILL.md)를, 상태를 어디에 둘지 정하기 전에는 [state-design-review](.claude/skills/state-design-review/SKILL.md)를 읽는다.
+- 무엇을 테스트할지, 어느 층에서 볼지 정하기 전에는 [test-design-review](.claude/skills/test-design-review/SKILL.md)를 읽는다.
 
 ## 명령어
 

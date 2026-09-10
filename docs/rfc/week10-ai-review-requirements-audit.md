@@ -158,9 +158,24 @@ FSD는 이미 있는 architecture-review/ESLint를 정본으로 연결한다. �
 
 A11·R23은 [e2e-scope-review](../../.claude/skills/e2e-scope-review/SKILL.md)로 구현하고 AGENTS.md에서 연결한다.
 
+### 테스트 설계·생성물 (티켓 05)
+
+| ID | 판정 | 정본 | 읽히는 경로 | 결정 근거 |
+| --- | --- | --- | --- | --- |
+| A08 · R19 | 신규 | `.claude/skills/test-design-review/SKILL.md` | AGENTS.md 코드 규칙의 스킬 포인터 + description 트리거 | 의도(무엇을 지킬지·단언·모킹 경계)와 실행(픽스처·핸들러·셀렉터)을 가르는 발제 8주차의 축을 그대로 썼다. 출력은 후보·층·포기 목록까지고 단언 문구와 모킹 경계는 작성자가 정한다. 코드도 스펙도 없으면 후보를 지어내지 않고 입력 부족으로 끝낸다 |
+| A09 · R21 | 보완 | `testing.md` 「픽스처와 핸들러」 | AGENTS.md 코드 규칙의 규칙 파일 포인터 | 픽스처는 앱 타입에서 가져오고 한 곳에서 만든다, 실제 서버가 보낼 수 없는 조합은 만들지 않는다, 픽스처의 개수·순서·경계값은 그 자체가 계약이라 이유를 남긴다. 검수 쪽은 `test-review` 거짓 초록불 표에 「불가능한 값」·「검증 대상 mock」 두 행으로 넣었다 |
+| A10 | 보완 | `test-review` 6단계 | `/self-review` 3단계 → `test-review` | 대상을 **하나**로 좁혔다 — 새 대표 테스트나 진단이 불명확한 테스트. 원복 후 다시 초록불을 확인하는 것까지가 이 단계이고, 전수는 기존 `pnpm test:mutation`이 맡는다. 과거 실험 재작성이나 전 테스트 강제는 하지 않는다 |
+| A12 · R26 · R27 | 보완 | `testing.md` 「E2E」 (조항) | AGENTS.md 코드 규칙의 규칙 파일 포인터 | 시작 경계·최종 결과 단언·`storageState`·계정/데이터 격리·조건 대기·flaky 대응 7개 조항. `test-review` 5단계 E2E 표는 이 조항의 **신호와 심각도만** 정하고 조항을 다시 쓰지 않는다. 로그인 검증 테스트의 `storageState` 우회는 정상 예외로 명시했다 |
+| R20 | 보완 (사실 정정) | `eslint.config.mjs`의 테스트 블록(범위) + `testing.md` 「이 레포 하네스」 · `test-review` 2단계(서술) | `pnpm lint`, `/self-review` | 실제 범위는 설정 파일이 정본이다. 오늘 기준 비활성화·단언 없음·truthiness는 `{src,tests}/**/*.test.{ts,tsx}`에서 에러가 되고, **`src/app/api/**`는 truthiness 조항만 꺼져 있다**(나머지 Vitest 규칙은 그대로 걸린다). 어느 조항도 걸리지 않는 곳은 `scripts/**`와 `e2e/**`뿐이라 리뷰가 눈으로 대조한다. 위반이 지금 없는 것과 앞으로 막히는 것을 구별한다 |
+| R22 | 유지 | `test-review` 거짓 초록불 표(시간·타임존·순서·비동기) | 위와 같음 | 이미 있던 네 행이 실행 환경별 관찰 한계를 덮는다. 층별로 무엇이 관찰되는지는 `test-design-review`의 층 판정 표가 맡아 규칙 파일에 복사하지 않았다 |
+| R28 | 부분 위임 | `testing.md` 「E2E」 마지막 줄 | 위와 같음 | 마스킹으로 줄어든 범위와 healer가 바꾼 단언의 기록을 요구하되, **그 산출물이 대상에 있을 때만** 적용한다. 검수 기준을 두는 것과 도구를 도입하는 것을 갈랐다 |
+| 검사기 테스트 | 신규 | `testing.md` 「검사기 테스트」 | 위와 같음 | 감사 「빈틈 1」의 결론이다. CLI 검사기의 공개 동작은 종료 코드와 진단 출력이다. 테스트 범위(`scripts/**/*.test.ts`)는 `testing.md` paths · `test-review` 대상 · `self-review` 라우팅 셋 다에 넣었다. 종료 코드를 **어떻게 나눌지는 스크립트 설계**라 규칙으로 정하지 않고, 테스트가 세 경우를 각각 실행해 갈리는 지점을 단언하도록만 요구한다 |
+
+검수 기록은 [05-test-design-checks](../../.scratch/week10-step4-5-ai-review-and-rule-promotion/verification/05-test-design-checks.md)에 있다. 대표 테스트 하나는 구현을 실제로 깨뜨려 검출을 확인했다(6 failed → 원복 후 18 passed). E2E 고정 sleep과 `scripts`·`e2e`의 테스트 무력화 차단은 4단계에서 문장 규칙까지만 두고 **5단계 승격 후보**로 남긴다.
+
 ## 현재 연결에서 확인한 구체적인 빈틈
 
-1. **테스트 검사 범위 불일치.** testing rule과 test-review의 테스트 파일 범위에는 `scripts/**/*.test.*`가 빠져 있다. ESLint의 Vitest 특화 규칙도 `{src,tests}/**/*.test.*`에만 적용된다. E2E가 test-review 대상이라는 사실과 skip/only/truthiness가 E2E에서도 lint로 차단된다는 것은 별개다. 기존 E2E 결과 검사는 실행 수/상태를 검사하지만 모든 테스트 코드 패턴의 정적 검사를 대체하지 않는다. test-review는 의도 출처에서 정적 검사 조건을 제외하므로, 새 CI/룰 회귀 검수에서는 **검사기의 입력 → 진단/exit code도 공개 동작으로 검토**하도록 적용 계약을 보완해야 한다.
+1. **테스트 검사 범위 불일치.** testing rule과 test-review의 테스트 파일 범위에는 `scripts/**/*.test.*`가 빠져 있다. ESLint의 Vitest 특화 규칙도 `{src,tests}/**/*.test.*`에만 적용된다. E2E가 test-review 대상이라는 사실과 skip/only/truthiness가 E2E에서도 lint로 차단된다는 것은 별개다. 기존 E2E 결과 검사는 실행 수/상태를 검사하지만 모든 테스트 코드 패턴의 정적 검사를 대체하지 않는다. test-review는 의도 출처에서 정적 검사 조건을 제외하므로, 새 CI/룰 회귀 검수에서는 **검사기의 입력 → 진단/exit code도 공개 동작으로 검토**하도록 적용 계약을 보완해야 한다. → 티켓 05에서 닫았다(아래 배치 결정). 다만 `src/app/api/**`는 truthiness 조항만 꺼져 있고 나머지 Vitest 규칙은 걸린다는 점을 이 문단이 뭉뚱그렸다 — 정확한 범위는 `eslint.config.mjs`가 정본이다.
 2. **명문화와 차단 혼동.** 고정 대기 금지, 검증 대상/API client를 mock하지 말라는 문장이 있어도 해당 패턴의 결정적 차단은 별도 확인이 필요하다. 현재 E2E의 실효 ESLint 설정에는 고정 sleep을 막는 규칙이 없다. 현재 위반이 발견되지 않은 것을 미래 위반 차단의 증거로 세면 안 된다.
 3. **code-review와 프로젝트 지침의 연결.** 일반 Standards/Spec 두 축은 있지만 어떤 변경에 상태/테스트/CI 검토와 관련 규칙를 선택하는지 없다. 참조하는 `docs/agents/issue-tracker.md`도 현재 저장소에 없어, 로컬 spec/issue를 실제로 찾아가는 경로를 바로잡아야 한다.
 4. **문서 전용 PR 생략의 예외.** 일반 설명 문서와 review rule·skill·prompt·ADR 변경을 동일하게 생략하면 리뷰 품질을 바꾼 변경이 검수되지 않는다. 상태·테스트 설계 문서는 해당 검토 절차, 기준 문서는 고정 사례 검수 등 목적별 검증을 정해야 한다. 이 때문에 E2E 실행 조건을 바꿀 필요는 없다.

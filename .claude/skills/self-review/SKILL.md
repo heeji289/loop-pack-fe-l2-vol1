@@ -13,7 +13,7 @@ description: 구현 후 spec 기준으로 변경된 코드의 기능, 품질, �
 
 1. `git diff`로 변경 파일 목록을 확인하고 변경된 모든 파일을 Read로 읽는다.
 2. spec 파일과 CONVENTIONS.md, 변경 파일에 걸리는 `.claude/rules/*.md`를 읽는다.
-3. 변경 파일에 테스트 관련 파일(`{src,tests}/**/*.test.{ts,tsx}` · `tests/**` · `e2e/**` · `vitest*.ts` · `playwright*.ts`)이 있으면 그 목록을 넘겨 `test-review`를 실행한다.
+3. 변경 파일에 테스트 관련 파일(`{scripts,src,tests}/**/*.test.{ts,tsx}` · `tests/**` · `e2e/**` · `vitest*.ts` · `playwright*.ts`)이 있으면 그 목록을 넘겨 `test-review`를 실행한다.
 4. 변경 종류에 맞는 리뷰 스킬만 함께 실행한다. 화면 컴포넌트를 무엇으로 나눴는지는 `component-review`, 공통 UI의 공개 API는 `analyze-component`, 레이어·폴더 이동은 `architecture-review`. 변경과 무관한 스킬은 실행하지 않는다.
 5. 하위 스킬의 지적을 **심각도 그대로 승계한다.** 지적마다 출처를 달아 지적 사항에 그대로 싣고, `blocker`만 판정에 반영한다. `architecture-review`는 위반을 `blocker`, 회색 지대를 질문, 구조 냄새를 `nit`으로 옮겨 받는다. 하위 스킬의 미검토 범위도 그대로 가져온다.
 6. 아래 관점으로 검증하고 결과를 형식에 맞춰 보고한다. 확인하지 못한 것은 통과로 적지 않고 미검토 범위에 남긴다.
