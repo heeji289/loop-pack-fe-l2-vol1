@@ -344,7 +344,27 @@ Lighthouse는 정기·수동 실행에서 홈과 상품 목록을 각각 3회 �
 
 ### 게이트 구성
 
-`pnpm build`가 `node scripts/week-10-ci/validate-env.mjs && next build`라서, build를 실행하는 모든 경로(CI build-e2e job·Vercel Preview·Production 원격 빌드·로컬)가 같은 검증을 build 시작 전에 통과해야 한다. 환경 구분은 NODE_ENV가 아니라 Vercel이 주입하는 `VERCEL_ENV`로 하고, CI는 `.env.example`을 복사한 격리 테스트값으로 검증 경로까지 실행한다 — 배포로 이어지는 Vercel 원격 빌드가 각 환경의 실제 값으로 재검증한다. 오류에는 변수명·이유만 출력하고 값은 출력하지 않는다(실행 검사 18케이스에 비노출 단언 포함).
+**2026-09-11 변경:** env 검증은 Next.js 생명주기에서 호출한다. `src/env/validate.ts`의 규칙은 import만으로 실행되지 않으며, Zod는 서버 실행에도 필요해 기존 버전을 dependencies로 옮겼다. 클라이언트는 검증 모듈을 import하지 않는다.
+
+| 시점 | 호출 지점 | 검사 대상 |
+| --- | --- | --- |
+| 개발/프로덕션 빌드 | `next.config.ts`의 해당 phase | APP_ORIGIN, 알려진 비밀 변수의 NEXT_PUBLIC_ 변형 |
+| Node 서버 인스턴스 시작 | `src/instrumentation.ts`의 `register()` | APP_ORIGIN, AUTH_SESSION_SECRET, 비밀 공개 변수 |
+
+APP_ORIGIN은 루트 metadata에서도 읽어 빌드와 서버 양쪽에 필요하다. AUTH_SESSION_SECRET은 요청 처리용이라 빌드에서 요구하지 않는다. 서버의 인증값 누락·공백 및 배포용 기본값 오류는 요청 처리 전에 종료 코드 1로 중단한다. 실제 Next 16.2.10의 `next start`는 register 예외만 던지면 Ready 로그 이후 프로세스를 유지하는 것을 확인해, Node register에서 검증 실패를 출력하고 명시적으로 종료한다. Ready 로그 자체는 기동 성공의 판정 기준으로 쓰지 않는다. Preview의 origin 생략 허용과 설정 시 주소 대조는 유지한다.
+
+`dev`·`start`는 Next 명령을 직접 호출하고 Next의 `.env*` 로딩을 사용한다. 별도 `validate-env.mjs` CLI는 제거했다. 규칙은 `src/env/validate.test.ts`에서 직접 검증하고 실제 Next 연결은 `check-env-build.test.ts`와 CI의 서버 실행 검사에서 확인한다. 오류에는 변수명·이유만 남긴다. CI는 `.env.example`의 격리값을 사용하고 Vercel 빌드·서버는 실제 대상 환경값을 사용한다.
+
+빌드용 env 실패는 기존 build-e2e·guard·배포 경로에 전파된다. 모든 PR에서 빌드 산출물로 실제 서버 env 실행 검사를 수행한다. Production은 `--prod --skip-domain`으로 후보를 만든 뒤 `check-deployment.mjs`가 동적 인증 API의 HTTP 401·앱 JSON 본문을 확인한다. 최신 main SHA를 다시 대조한 뒤 검증한 동일 배포만 promote하므로, 런타임 env 오류로 기동하지 못하는 후보는 운영 도메인에 연결되지 않는다. 원격 실패·복구 실증은 아래 과거 기록과 분리해 갱신한다.
+
+### 생명주기 변경 검증
+
+- env·번들 CLI 테스트 31개, lint·typecheck 통과. 런타임 시크릿 없이 빌드하는 새 테스트의 실패를 먼저 확인한 뒤 구현으로 통과시켰다.
+- `AUTH_SESSION_SECRET=''`로 실제 `pnpm build` 실행: 프로덕션 빌드·번들 예산 모두 통과.
+- 실제 Next 16.2.10 프로세스 실행(Node 22.23.1, localhost): Production start의 빈 시크릿·잘못된 origin, dev의 잘못된 origin·빈 시크릿 모두 종료 코드 1 확인. 타임아웃에 의한 강제 종료는 성공으로 인정하지 않았다.
+- 같은 프로덕션 산출물에 정상 env를 주입해 홈 HTTP 200과 `/api/auth/me`의 비로그인 HTTP 401·응답 본문 확인. 검증 프로세스는 종료했다.
+- 최초 서버 검증은 register 예외 후에도 프로세스가 유지돼 실패했다. `register()`에서 검증 오류를 출력하고 종료하도록 수정한 뒤 위 5개 시나리오가 통과했다.
+- 원격 Vercel의 새 배포·콜드 스타트 실증은 이번 로컬 검증에 포함하지 않았다. 아래 PR·배포 실증은 변경 전 구현의 기록이다.
 
 ### required 판단 — 별도 check를 만들지 않았다
 
@@ -354,7 +374,7 @@ Lighthouse는 정기·수동 실행에서 홈과 상품 목록을 각각 3회 �
 | 실패 변동성 | 결정적 — 네트워크·외부 서비스 의존이 없는 스키마 검증이라 flaky 요인이 없다 |
 | 현재 실패 리스크 | 오설정일 때만 실패. 정상 상태 오탐 0 (PR #18 초록 실증) |
 
-env 검사는 build-e2e job의 Build step 앞단이므로 실패가 그대로 build-e2e 실패 → 이미 required인 guard 실패로 전파된다. 0.1초짜리 검사에 별도 required check·job을 만들면 관리 비용만 늘어 기존 guard 전파로 충분하다고 판단했다.
+빌드용 env 검사는 build-e2e job의 Build step에서 Next 설정을 읽을 때 실행되므로 실패가 그대로 build-e2e 실패 → 이미 required인 guard 실패로 전파된다. 0.1초짜리 검사에 별도 required check·job을 만들면 관리 비용만 늘어 기존 guard 전파로 충분하다고 판단했다.
 
 ### 실증 기록 (2026-09-10)
 
@@ -363,3 +383,62 @@ env 검사는 build-e2e job의 Build step 앞단이므로 실패가 그대로 bu
 - **Vercel 배포 단계 차단** — 같은 실험 PR에서 Preview 환경변수 `APP_ORIGIN`을 타 환경 주소(`https://loop-pack-fe-l2-vol1.vercel.app`)로 오설정하고 커밋 `e213d02d`로 재배포를 트리거: Vercel 원격 빌드가 `env 검증 실패(preview) — APP_ORIGIN: 이 환경의 배포 주소와 다르다`로 실패(배포 `dpl_6DaajmGVWKpQzGMT94o4niF5ABkP`), PR의 Vercel check가 빨간불로 표시됐다. 실제 값 재검증이 CI 테스트값 성공과 별개로 동작한다는 증거. 빌드 로그 화면: ![Vercel Preview env 검증 실패](./images/week10-env-gate-vercel-fail.png)
 - **실험 잔재 원복** — Preview의 오설정 `APP_ORIGIN` 제거 완료(`vercel env rm`), 실험 PR은 머지 없이 닫는다. `.env.example` 오류값은 실험 브랜치에만 있다.
 - **Production 게시 차단·복구** — PR #18 머지(병합 커밋 `27b6220c`) 직전에 Production env에 `NEXT_PUBLIC_AUTH_SESSION_SECRET`(더미값)을 일시 설정해 실전으로 확인했다. [run 34490240780](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34490240780) attempt 1: checks·build-e2e(전체 E2E)는 성공했지만 deploy의 Vercel 원격 빌드가 `env 검증 실패(production) — NEXT_PUBLIC_AUTH_SESSION_SECRET: 서버 비밀 변수의 공개 접두 변형`으로 실패 — 게시 미실행, 기존 Production `dpl_Eq3fkz5sezvBXwdXsrpF8f9iddp5`(17:07 게시분)가 그대로 유지됐다. 오설정 제거(`vercel env rm`) 후 **같은 SHA**의 attempt 2에서 deploy 성공, 새 배포 `dpl_Gz8GMaLhdDTDvLTuDQLBbgcERRso`(23:42) 게시 — 검증·배포 SHA 일치. 실패 로그 화면: ![Production deploy env 검증 실패](./images/week10-env-gate-production-deploy-fail.png)
+
+### 티켓 1 재실증 (2026-09-11)
+
+기존 PR #18·#19는 이전 CLI 구현의 기록이다. 생명주기 변경은 env 전용 PR #21 (`1761aeba`)에서 다시 검증했다. 번들 후속 구현과 다른 화면 변경은 이 PR에 포함하지 않았다.
+
+- **로컬**: 테스트 440개·E2E 16개, lint·typecheck·production build, 실제 서버 실행 검사 4종 통과. 첫 전체 실행의 기존 세션 테스트 1개는 타임아웃으로 실패했고 단독 15개와 전체 440개 재실행에서 통과했다. 테스트 기대값이나 timeout을 변경하지 않았다. 당시 배포 응답 판정 함수의 오류 사례 4개 실패·복원 후 5개 통과를 확인했다. 이 검사는 실제 CLI 연결 누락을 잡지 못해 아래 추가 보완에서 대체했다.
+- **정상 PR**: [PR #21](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/21), [run 34501245339](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34501245339)에서 checks·build-e2e·guard 성공. 실제 서버 실행 step은 약 3초(16:19:22–25 UTC), build는 약 13초였다. Preview `dpl_BPkigeEfXKUNUC8AgYiSVrfiisVF`의 [동적 인증 API 대상 배포](https://loop-pack-fe-l2-vol1-l1a5ekemh-heeji289-6430s-projects.vercel.app)는 HTTP 401·정확한 앱 JSON 본문으로 검증됐다.
+- **오류 PR**: [PR #22](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/22)의 `8eb4e0b6`, [run 34501339378](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34501339378)에서 잘못된 origin과 빈 비밀 공개 변수를 주입했다. checks는 성공, Build는 Next 설정 로딩에서 exit 1(최적화 빌드 미진행), build-e2e·guard 실패, mergeStateStatus BLOCKED를 확인했다. `23e472f5`로 오류값을 원복한 [run 34501597916](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34501597916)은 checks·build-e2e·guard 전부 성공했다. PR #22는 병합 없이 닫고 원격 실험 브랜치를 삭제했다.
+- **Preview 빌드 오류**: 배포별 `--build-env APP_ORIGIN=ftp://invalid.example`로 `dpl_HzkTjoSwCLuEkXaAFgXd1VZFFyTN`이 build/preview origin 검증에서 실패했다.
+- **Preview 서버 오류**: 배포별 `--env AUTH_SESSION_SECRET=loopers-week09-secret`로 `dpl_AMzbe96didWvPCcNhhpT3ihsjMnQ`는 빌드 READY지만 동적 API HTTP 500·후보 검사 exit 1이었다. 런타임 로그는 `env 검증 실패(server/preview) — AUTH_SESSION_SECRET: 배포 환경에서 데모 기본값을 사용했다`와 프로세스 exit 1을 기록했다. 정상 값은 PR Preview에서 위의 HTTP 401·본문으로 확인했다.
+- **Production 서버 오류 차단**: 동일 코드의 `--prod --skip-domain` 후보 `dpl_J7ZNj1Sg9qxYtz4JptJKnGQD8Saz`에 같은 오류 인증값을 배포별 주입했다. 빌드는 READY, 실제 API는 HTTP 500, 후보 검사는 exit 1이었다. 런타임 로그의 server/production 검증 오류·프로세스 exit 1을 확인했고 promote하지 않았다. 이후 운영 도메인을 inspect한 ID는 실험 전과 같은 `dpl_Gz8GMaLhdDTDvLTuDQLBbgcERRso`였다.
+- **실험 입력 격리**: 공유 Vercel env는 수정하지 않았다. CLI는 로컬 `.env`도 업로드할 수 있어 테스트용 템플릿을 배포 입력에서 제외했다. 이 파일 때문에 최초 Preview 서버 오류 실험은 origin 오류로 빌드부터 실패했고, 파일을 제외한 새 후보에서 서버 오류를 따로 확인했다. 실제 CI deploy는 별도 checkout job이라 이 로컬 파일이 없다.
+
+정상 Production 수동 후보 `dpl_agHUq7VszdFrPxSkXGf6F3pq1ueR`는 실제 Production env로 동적 API 검증을 통과했다. 자동 승격은 최종 PR head `f3c560ea`의 [run 34501780251](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34501780251)이 전부 통과한 뒤 병합 SHA `f3b0d1ee`의 main run에서 확인한다. 후보 API 요청에는 배포 보호 우회가 가능한 `vercel curl`을 사용하며, 보호 페이지의 401은 앱 응답과 본문이 달라 통과할 수 없다. 네트워크·보호 인증 실패도 승격을 중단한다. CLI 출력은 `--non-interactive --json`으로 고정해 안내 출력과 URL을 혼동하지 않는다.
+
+- **자동 배포에서 발견한 CLI 인수 오류**: 병합 SHA `f3b0d1ee`의 [run 34501975852](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34501975852)은 전체 검증·E2E와 후보 빌드가 성공했지만 CI 인증 요청에서 실패해 promote하지 않았다. 후보 `dpl_48tHdMFvjXf9WhMQ1FWbhrNmKKbq`는 로컬 인증으로는 정상 API 응답을 반환했다. CLI 59.14.0의 curl 인수 파서가 `--token`을 curl 옵션으로 전달하는 경로를 확인했다. CLI가 지원하는 `VERCEL_TOKEN` 환경변수로 인증하고 중복 인수를 제거한다. 실패를 무시하거나 수동으로 승격해 우회하지 않는다.
+
+- **자동 Production 복구·승격 완료**: 인증 인수 수정 [PR #23](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/23)의 [run 34502734079](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34502734079)은 필수 checks·guard·핵심 E2E 성공. 병합 SHA `38fa8487071a5b91f362c815044f475e58ba1d74`의 [main run 34502967531](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34502967531)은 checks·전체 E2E·deploy 전부 성공했다. 16:37:14 UTC에 후보 API HTTP 401·본문 검증 PASS, main 최신성 재확인 후 16:37:17에 **동일 후보** `dpl_4RmiC6t1zL6iTbPiYy8UKaMLWHME` 승격 성공. [배포 URL](https://loop-pack-fe-l2-vol1-d92rgm32i-heeji289-6430s-projects.vercel.app)과 운영 도메인 inspect의 ID가 일치했다. build 이후 후보 API 검사까지 약 4초, promote 약 2초가 추가됐다.
+- **배포 실증 당시 자체 검증**: 이후 실제 CLI 연결의 자동 검사 공백을 발견해 완료 판정을 보류하고 아래와 같이 보완했다. 이후 발견한 CLI 인증 문제는 동일 요청 경로에서 수정하고 실제 CI 배포의 실패→성공으로 확인했다. 오류 PR은 원복·종료·원격 브랜치 삭제를 완료했고 공유 env는 바꾸지 않았다. 배포 이력은 실패 증거로 보존한다. 후속 번들 예산·PR 코멘트·guard 정책 추출은 이 티켓의 완료에 포함하지 않는다.
+
+### 티켓 1 자동 검사 보완 (2026-09-11)
+
+- `check-env-build.test.ts`(이전 `validate-env.test.ts`에서 분리): 저장소의 `next.config.ts`와 검증 모듈을 복사한 최소 앱에서 실제 `next build`를 실행한다. 런타임 시크릿 없이 성공하고, origin·비밀 공개 변수 오류는 빌드 전에 exit 1로 중단되는지 확인한다. 임시 앱의 외부 node_modules 연결 때문에 Webpack을 사용하며 실제 앱의 프로덕션 빌드는 기존 CI가 담당한다.
+- `check-deployment.test.ts`: 함수 호출 테스트를 실제 CLI 실행으로 교체했다. 외부 Vercel 요청만 고정 응답으로 대체하고 정상 401·본문, 500, 보호 페이지, 다른 JSON, 잘못된 200, 빈 응답, URL 오류, 외부 CLI 실패의 종료 코드·진단·summary를 확인한다. Vercel 요청 인수도 검사해 이전 `--token` 전달 오류를 막는다.
+- `check-deployment.mjs`: 실패 summary에도 이유를 남긴다. 외부 CLI 오류는 인증·네트워크·인수·기타 실행으로 분류하고 exit·signal·오류 코드를 출력한다. 인증값이 섞일 수 있는 stderr 원문은 게시하지 않는다.
+- **실패 검출 증거**: 격리 작업 트리에서 build 검증 호출을 제거하자 새 테스트 2개가 실패했다. 배포 CLI의 응답 판정 호출을 제거하자 5개가 실패했다. 두 변경을 원복한 뒤 관련 테스트 42개가 통과했다. 보완 전에는 두 연결을 제거해도 각각 기존 25개·5개 테스트가 통과했다.
+- **보완 검증 완료**: 관련 테스트 42개, 전체 lint·typecheck 통과. 최종 테스트 환경 타입 수정 뒤 배포 CLI 14개와 typecheck·변경 파일 lint도 다시 통과했다.
+- 새 테스트는 현재 CI의 전체 unit / CLI integration 실행 대상이다. 원격 배포 실증은 위 main run의 기록이며, 이번 보완은 로컬 실행 검증이다. 별도 재배포나 운영 설정 변경은 하지 않았다.
+
+### 불필요한 env CLI 제거·summary 중복 수정 (2026-09-11)
+
+- 앱과 CI가 호출하지 않는 `validate-env.mjs` 및 이 CLI 전용 `.env.development` 로딩 테스트를 삭제했다. 직접 의존하던 `@next/env`도 제거했다. Next 자체의 env 로딩은 유지된다.
+- 변수별 규칙과 호출 시점의 env 반영은 `src/env/validate.test.ts`에서 직접 검사한다. 실제 Next 빌드 연결 3개는 `check-env-build.test.ts`로 분리해 CLI integration 실행 대상에 유지했다. 배포 검사 CLI 테스트는 유지한다.
+- Next 16.2.10의 빌드 본체와 Turbopack 빌드·워커는 production-build phase로 설정을 다시 읽는다. 기존 검증 함수는 호출마다 PASS를 append해 동일 summary가 반복됐다. 검증은 매번 실행하되 함수에서는 FAIL만 즉시 기록하고, PASS는 CI Build 명령 성공 뒤 한 번만 기록하도록 바꿨다.
+- 반복 성공 검증 3회가 summary를 채우지 않고 이후 실패는 이유와 함께 기록되는 테스트를 추가했다. 수정 전에는 PASS 3개로 실패하는 것을 확인했다. 수정 후 규칙 24개·실제 빌드 3개·배포 CLI 14개(총 41개), lint·typecheck를 통과했고 새 파일들이 unit / CLI integration에서 발견되는 것도 확인했다.
+
+### 티켓 1 제출용 캡처
+
+2026-09-11 사용자 캡처. [과제 3단계 완료조건](../assignments/week-10.md#-3단계--예산-게이트를-걸고-결과를-보이게-해요)의 빨간불·실패 리포트 가시성과 수정 후 복구를 env 게이트에서 확인한 증거다. 번들 초과 대상·실측 크기·임계값·초과량이 보이는 캡처는 번들 티켓에서 별도로 남긴다.
+
+**(1) env 오류의 실패 전파와 원인 표시** — [PR #22](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/22), SHA `8eb4e0b6`, [실패 run 34501339378](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34501339378) (화면의 Quality #56).
+
+기본 checks는 통과하고 build-e2e·required guard가 실패했다. 바로 아래 job summary에는 잘못된 APP_ORIGIN과 빈 값이어도 금지되는 NEXT_PUBLIC_AUTH_SESSION_SECRET이 변수명·이유로 표시된다. 원시 로그를 열지 않고 설정 오류를 알 수 있으며 비밀값은 노출되지 않는다. 이 PR의 deploy 생략은 PR 이벤트 정책에 따른 것이므로 Production 차단 증거와 구분한다.
+
+![env 오류로 build-e2e와 guard가 실패한 PR 실행](./images/week10-env-lifecycle-pr-fail.png)
+
+![APP_ORIGIN과 비밀 공개 변수의 실패 이유를 표시한 job summary](./images/week10-env-lifecycle-fail-summary.png)
+
+**(2) 같은 실험 PR의 원복 후 성공** — PR #22, SHA `23e472f5`, [복구 run 34501597916](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34501597916) (Quality #57).
+
+오류값을 원복하자 checks·build-e2e·guard가 모두 통과했다. 실험 PR은 병합 없이 닫았다. 화면의 #56·#57은 workflow 실행 번호이며 PR 번호는 둘 다 #22다.
+
+![오류값 원복 후 checks와 build-e2e와 guard가 통과한 동일 PR 실행](./images/week10-env-lifecycle-pr-recovered.png)
+
+**(3) 실제 Production 후보 검증과 배포 추적성** — SHA `38fa8487071a5b91f362c815044f475e58ba1d74`, [main run 34502967531](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34502967531).
+
+summary에 후보의 동적 인증 API HTTP 401·본문 확인 PASS와 Production 배포 SHA·URL이 함께 보인다. 후보 검증 URL과 배포 URL이 같으며, 동일 배포 promote 성공과 운영 도메인의 배포 ID 대조는 위 재실증 기록의 로그 근거로 보완한다. HTTP 401은 미로그인 인증 API의 기대 응답이고 앱의 정확한 JSON 본문까지 검사한 결과다.
+
+![동일 후보의 API 검증 PASS와 Production 배포 SHA 및 URL](./images/week10-env-lifecycle-production-summary.png)
