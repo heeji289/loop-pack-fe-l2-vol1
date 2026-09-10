@@ -27,7 +27,10 @@ const INTEGRATION_DOM_TESTS = [
   'src/features/product/model/search-params.dom.test.tsx',
 ];
 
-const INTEGRATION_CLI_TESTS = ['scripts/week-10-ci/validate-env.test.ts'];
+const INTEGRATION_CLI_TESTS = [
+  'scripts/week-10-ci/validate-env.test.ts',
+  'scripts/week-10-ci/check-budget.test.ts',
+];
 
 const INTEGRATION_TESTS = [
   ...INTEGRATION_NODE_TESTS,
