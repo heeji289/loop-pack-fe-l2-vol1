@@ -72,8 +72,8 @@ describe('목록 조회', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  // 조건이 그대로라 이전 목록이 아닌데도 조회는 진행 중인 상태다
-  it('같은 조건으로 다시 조회하는 동안 갱신 중임을 알리고 페이지 이동을 잠근다', async () => {
+  // 같은 조건 재조회라 화면의 페이지 번호는 이미 확정된 값이다. 알리되 막지는 않는다.
+  it('같은 조건으로 다시 조회하는 동안 갱신 중임을 알리되 페이지 이동은 막지 않는다', async () => {
     const { queryClient } = renderProductList();
 
     expect(await screen.findByText(totalCountText)).toBeInTheDocument();
@@ -85,7 +85,7 @@ describe('목록 조회', () => {
     expect(
       await screen.findByText(`${totalCountText} · 갱신 중`),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '다음' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '다음' })).toBeEnabled();
   });
 });
 
