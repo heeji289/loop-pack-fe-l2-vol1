@@ -96,6 +96,7 @@ export async function review({
     limitations: [],
     rules: [],
     rules_read: [],
+    sourceFiles: [],
   };
   let phase = 'collection_failed';
   try {
@@ -224,7 +225,16 @@ export async function review({
     for (const entry of sourceFiles) {
       if (Number(git('cat-file', '-s', entry.oid)) + bytes > INPUT_LIMIT)
         throw new Error('input_limit');
-      const content = read(entry);
+      // 변경 파일에는 스크린샷 같은 바이너리가 섞인다. 읽을 수 없는 파일만 빼고 나머지는 검토한다.
+      let content;
+      try {
+        content = read(entry);
+      } catch (error) {
+        if (!['non_text_input', 'unsupported_file'].includes(error.message))
+          throw error;
+        result.limitations.push(`${entry.path}: 텍스트가 아니라 소스에서 제외`);
+        continue;
+      }
       bytes += Buffer.byteLength(JSON.stringify({ path: entry.path, content }));
       if (bytes > INPUT_LIMIT) throw new Error('input_limit');
       sources.push({ path: entry.path, content });
@@ -336,20 +346,24 @@ export async function review({
     const byPath = new Map(
       sources.map(({ path, content }) => [path, content.split('\n').length]),
     );
-    for (const finding of output.findings) {
-      if (
-        typeof finding.rule !== 'string' ||
-        !rules.some(({ path }) => finding.rule.startsWith(`${path}#`)) ||
-        !files.includes(finding.path) ||
-        !Number.isInteger(finding.line) ||
-        finding.line < 1 ||
-        finding.line > (byPath.get(finding.path) ?? 0) ||
-        typeof finding.evidence !== 'string' ||
-        !finding.evidence.trim() ||
-        !['high', 'medium'].includes(finding.confidence)
-      )
-        throw new Error('invalid_finding');
-    }
+    // 형식이 어긋난 지적 하나 때문에 확인 가능한 나머지 지적까지 버리지 않는다. 버린 사실은 남긴다.
+    const findings = output.findings.filter(
+      (finding) =>
+        typeof finding.rule === 'string' &&
+        rules.some(({ path }) => finding.rule.startsWith(`${path}#`)) &&
+        files.includes(finding.path) &&
+        Number.isInteger(finding.line) &&
+        finding.line >= 1 &&
+        finding.line <= (byPath.get(finding.path) ?? 0) &&
+        typeof finding.evidence === 'string' &&
+        finding.evidence.trim() !== '' &&
+        ['high', 'medium'].includes(finding.confidence),
+    );
+    if (findings.length !== output.findings.length)
+      result.limitations.push(
+        `형식이 어긋난 지적 ${output.findings.length - findings.length}건 제외 — 기준 경로·대상 파일·줄 번호를 확인할 수 없습니다.`,
+      );
+    const limitations = [...result.limitations, ...output.limitations];
     if (
       !rules.every(({ path }) => output.rules_read.includes(path)) ||
       output.rules_read.some((path) => !rulePaths.has(path))
@@ -358,16 +372,16 @@ export async function review({
         ...result,
         status: 'partial',
         reason: 'criteria_read_unconfirmed',
-        findings: output.findings,
-        limitations: output.limitations,
+        findings,
+        limitations,
         rules_read: output.rules_read,
       };
     return {
       ...result,
-      findings: output.findings,
-      limitations: output.limitations,
+      findings,
+      limitations,
       rules_read: output.rules_read,
-      status: output.limitations.length ? 'partial' : output.status,
+      status: limitations.length ? 'partial' : output.status,
     };
   } catch (error) {
     return {
@@ -379,7 +393,6 @@ export async function review({
         'non_text_input',
         'input_limit',
         'invalid_output',
-        'invalid_finding',
       ].includes(error.message)
         ? error.message
         : 'review_not_completed',
