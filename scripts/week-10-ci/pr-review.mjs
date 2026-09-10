@@ -281,11 +281,24 @@ export async function review({
             type: 'json_schema',
             name: 'pr_review',
             strict: true,
-            schema,
+            schema: {
+              ...schema,
+              properties: {
+                ...schema.properties,
+                rules_read: {
+                  type: 'array',
+                  items: { type: 'string', enum: [...rulePaths] },
+                },
+              },
+            },
           },
         },
       }),
     });
+    result.rateLimits = {
+      requests: response.headers.get('x-ratelimit-limit-requests'),
+      tokens: response.headers.get('x-ratelimit-limit-tokens'),
+    };
     if (!response.ok)
       return {
         ...result,
