@@ -4,6 +4,17 @@
   align-items: flex-start;
 }
 
+.selectAllRow {
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e2e2;
+}
+
+.selectAllLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .list {
   flex: 1;
   margin: 0;

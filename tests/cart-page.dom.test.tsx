@@ -327,3 +327,38 @@ describe('상품 정보', () => {
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
 });
+
+describe('전체 선택', () => {
+  it('전체 선택을 누르면 모든 상품이 선택되고, 다시 누르면 모두 해제된다', async () => {
+    const firstProduct = productAt(0);
+    const secondProduct = productAt(1);
+
+    seedCartItems(
+      { productId: firstProduct.id, quantity: 1, checked: true },
+      { productId: secondProduct.id, quantity: 1, checked: false },
+    );
+    const { user } = renderCartPage();
+
+    const firstItemCheckbox = await screen.findByRole('checkbox', {
+      name: firstProduct.name,
+    });
+    const selectAll = screen.getByRole('checkbox', { name: '전체 선택' });
+    expect(selectAll).not.toBeChecked();
+
+    await user.click(selectAll);
+
+    expect(selectAll).toBeChecked();
+    expect(firstItemCheckbox).toBeChecked();
+    expect(
+      screen.getByRole('checkbox', { name: secondProduct.name }),
+    ).toBeChecked();
+
+    await user.click(selectAll);
+
+    expect(firstItemCheckbox).not.toBeChecked();
+    expect(
+      screen.getByRole('checkbox', { name: secondProduct.name }),
+    ).not.toBeChecked();
+    expect(screen.getByRole('button', { name: '구매하기' })).toBeDisabled();
+  });
+});
