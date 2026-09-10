@@ -317,4 +317,17 @@ Lighthouse는 정기·수동 실행에서 홈과 상품 목록을 각각 3회 �
 - **코드 PR의 조건부 실행** — [PR #4](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/4), [run 34435589309](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34435589309): 변경 16개를 런타임 13·문서 3으로 분류. 전체 영향 경로(quality.yml·package.json·vitest.config.ts) 검출로 integration 전체 폴백(25개 통과), 핵심 E2E 3개 실행·통과(flaky 0), guard PASS. checks·build-e2e 병렬로 전체 약 1분 30초.
 - **required·strict 설정** — main branch protection에 `checks`·`guard` required와 strict 적용을 API로 확인: `{"contexts":["checks","guard"],"strict":true,"enforce_admins":true}`. guard는 첫 실행 전 설정 화면에 나타나지 않아 PR #4의 첫 run 후 추가했다. PR #4는 required 충족으로 MERGEABLE/CLEAN.
 - **배포 게이트 첫 실전** — 병합 커밋 `be3ec589`의 [run 34437046969](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34437046969): 통합 전체·전체 E2E 5종 16개 통과(passed 16·flaky 0·skipped 0, full 모드 실행 검증 포함) 후 같은 SHA를 Production에 게시 — https://loop-pack-fe-l2-vol1.vercel.app. Vercel secrets 오류(ID 불일치→토큰 scope)로 deploy가 2회 실패하는 동안 검증 계층은 초록, 배포 단계만 빨간불로 남고 기존 Production이 유지됐다 — 배포 실패가 침묵 통과로 바뀌지 않는 동작의 실측 증거.
-- 남은 항목(문서 PR 생략·draft/base 재판정·오류 검출·strict 재검증·비핵심 E2E 배포 차단·정기/수동·측정)은 위 표의 대기 상태를 유지한다.
+- ~~남은 항목(문서 PR 생략·draft/base 재판정·오류 검출·strict 재검증·비핵심 E2E 배포 차단·정기/수동·측정)은 위 표의 대기 상태를 유지한다.~~ → 2차에서 완료.
+
+### 실증 기록 2차 (2026-09-10)
+
+- **문서 전용 PR** — [PR #5](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/5), run 34438250214: 문서 1·런타임 0 분류, integration "판별 성공·의도된 생략", E2E 생략(문서 전용), guard PASS, 머지 가능.
+- **draft↔ready** — [PR #6](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/6): draft run에서 관련 integration 2개만 선택(무관 23개 제외)·E2E 생략(draft) → ready 전환 run 34438572260에서 같은 diff에 핵심 E2E 3개 실행·통과.
+- **오류 검출·차단·복구** — 커밋 3134a092(개수 +1): 관련 2개 선택, 기존 테스트 9개가 불일치 검출 실패(run 34438718419), guard FAIL·PR BLOCKED. 핵심 E2E는 통과 — 층 분리 확인. 원복 5104fb35 후 같은 선택 조건에서 통과(run 34438884451).
+- **strict 재검증** — A(#5)·B(#6) 모두 CLEAN → A 머지 → B `BEHIND` 차단 → Update branch(f0eb3a2b) → 재검증 run 34439119718 → 머지.
+- **base 재지정** — [PR #8](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/8): main 외 대상에서 E2E 생략(run 34441289636) → base를 main으로 변경(edited) → 핵심 E2E 재실행(run 34441470263).
+- **필터 반례** — [PR #7](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/7): 테스트 파일 자체 변경 → 자기 선택 1개(run 34440565350) / rename → paths-filter가 added+deleted 2경로로 펼침을 실측, 이전 경로 부재로 전체 폴백(run 34440694804 — 대조 확정) / tests/msw 변경 → 전체 영향 폴백(run 34440838760) / classify 강제 실패 → changes 실패에도 unit·lint·typecheck 실행 유지, integration step 실패·guard FAIL·BLOCKED(run 34440961662) / 로그인 픽스처 오류 → 핵심 E2E 실패(재시도 2회 소진 후 failed — retry 정책 실측), guard FAIL·BLOCKED(run 34441105276).
+- **배포 차단·복구** — [PR #9](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/9)(비핵심 dialog 스펙 의도적 실패)는 PR 검증을 통과해 머지 → main run 34441821105에서 전체 E2E 실패·deploy skipped·Production `dpl_4sTRk6Up` 유지 → 원복 [PR #10](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/10) 머지 → run 34442109441 green·새 배포 `dpl_974UBU3Z`. 합의한 안전 경계(비핵심 회귀는 main 유입 가능, 배포 전 차단) 그대로.
+- **수동 dispatch** — run 34442293948(workflow_dispatch, main): 전체 E2E 16개·Lighthouse 홈·상품 각 3회 성공, 리포트 artifact 업로드, deploy skipped.
+- **측정** — 같은 내용 계열 커밋·같은 날 CI에서 각 3회. integration step: 관련 선택(2개) 6/6/5초(중앙 6) vs 전체(25개) 16/17/16초(중앙 16) — 구간 비겹침, 10초·63% 단축. checks job 전체: 52 vs 64초(중앙값). 판별 비용: changes job 8/6/11초(중앙 8, 병렬 job이라 wall-clock에 거의 흡수). 선택 사례는 소형 diff 기준이며 전체 영향 경로가 섞인 PR은 폴백으로 이득이 없다 — related는 측정과 무관하게 기본 정책(ADR-7).
+- **남은 대기**: 실제 첫 schedule run(월 03:30 KST), freshness 경쟁 재현(타이밍 의존·선택), flaky 발생 시 기록.
