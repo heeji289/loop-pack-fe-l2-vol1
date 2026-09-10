@@ -29,6 +29,7 @@ if (
     assert.equal(deployment.protocol, 'https:');
     assert.equal(deployment.hostname.endsWith('.vercel.app'), true);
     assert.equal(deployment.href, `${deployment.origin}/`);
+    // VERCEL_TOKEN은 CLI가 env에서 읽는다. --token은 curl 옵션으로 전달되므로 넣지 않는다.
     const result = spawnSync(
       'pnpm',
       [
@@ -39,9 +40,6 @@ if (
         '--deployment',
         deployment.origin,
         '--yes',
-        ...(process.env.VERCEL_TOKEN
-          ? ['--token', process.env.VERCEL_TOKEN]
-          : []),
         '--',
         '--silent',
         '--show-error',
