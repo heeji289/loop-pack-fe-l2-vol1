@@ -96,10 +96,12 @@ const FULL_LIMITS = {
   'shared-js': SIZE.shared,
 };
 
+// baselinePath에 null을 주면 BUDGET_BASELINE_FILE 없이 — CI와 같은 기본 경로로 — 돌린다.
 const runCheckBudget = (
   root: string,
   limitsPath: string,
-  baselinePath = join(root, 'no-baseline.json'),
+  baselinePath: string | null = join(root, 'no-baseline.json'),
+  extraEnv: Record<string, string> = {},
 ) => {
   const result = spawnSync(process.execPath, [SCRIPT_PATH], {
     encoding: 'utf8',
@@ -107,8 +109,9 @@ const runCheckBudget = (
       ...process.env,
       BUDGET_ROOT: root,
       BUDGET_LIMITS_FILE: limitsPath,
-      BUDGET_BASELINE_FILE: baselinePath,
+      ...(baselinePath === null ? {} : { BUDGET_BASELINE_FILE: baselinePath }),
       GITHUB_STEP_SUMMARY: '',
+      ...extraEnv,
     },
   });
 
@@ -240,20 +243,47 @@ it('main 기준선이 없으면 증가량 열 없이 판정만 한다', TIMEOUT,
   expect(output).not.toContain('base 대비');
 });
 
-it('다음 PR의 기준선으로 쓸 측정값을 남긴다', TIMEOUT, () => {
+// 소비 측 테스트는 손으로 적은 기준선을 읽으므로, 생산 측에서 sha까지 단언해야
+// "생산자가 sha를 안 써도 양쪽 다 초록"인 구멍이 막힌다.
+it('다음 PR의 기준선으로 쓸 측정값과 기준 SHA를 남긴다', TIMEOUT, () => {
   const root = makeFixture();
   const limits = writeLimits(root, FULL_LIMITS);
 
-  runCheckBudget(root, limits);
+  const { status } = runCheckBudget(root, limits, undefined, {
+    GITHUB_SHA: 'c0ffee1234567890',
+  });
   const saved = JSON.parse(
     readFileSync(join(root, 'reports/budget.json'), 'utf8'),
-  ) as { rows: { id: string; size: number }[] };
+  ) as { sha: string; rows: { id: string; size: number }[] };
 
+  expect(status).toBe(0);
+  expect(saved.sha).toBe('c0ffee1234567890');
   expect(saved.rows).toEqual([
     { id: 'home-initial-js', size: SIZE.home },
     { id: 'products-initial-js', size: SIZE.products },
     { id: 'shared-js', size: SIZE.shared },
   ]);
+});
+
+// CI는 캐시를 `baseline/`에 풀고 BUDGET_BASELINE_FILE을 넘기지 않는다 —
+// 기본 경로가 quality.yml의 cache path와 어긋나면 증가량이 조용히 사라진다.
+it('기본 경로의 기준선도 읽는다', TIMEOUT, () => {
+  const root = makeFixture();
+  const limits = writeLimits(root, FULL_LIMITS);
+  mkdirSync(join(root, 'baseline'), { recursive: true });
+  writeFileSync(
+    join(root, 'baseline/budget.json'),
+    JSON.stringify({
+      sha: 'deadbeef0000',
+      rows: [{ id: 'home-initial-js', size: SIZE.home - 500 }],
+    }),
+  );
+
+  const { status, output } = runCheckBudget(root, limits, null);
+
+  expect(status).toBe(0);
+  expect(output).toContain('+500 B');
+  expect(output).toContain('main `deadbee`');
 });
 
 it('임계값이 누락된 대상이 있으면 실패한다', TIMEOUT, () => {
