@@ -339,3 +339,27 @@ Lighthouse는 정기·수동 실행에서 홈과 상품 목록을 각각 3회 �
 - **로그인 화면 가운데 정렬** — [PR #12](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/12), run 34443456604. 실제 디자인 결함 수정(1280px에서 왼쪽 정렬, before/after 스크린샷 확인). `home.css`는 root layout이 import해 테스트 그래프 밖이라 파일별 프로브가 관련 0개를 검출 → **integration 전체 폴백**(이유에 home.css 명시) + 핵심 E2E 실행. 합산 판별이었다면 LoginPage.tsx의 선택이 이 공백을 가렸을 사례가 실전에서 나왔다.
 - **장바구니 전체 선택** — [PR #13](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/13), run 34443836321. 실제 기능 추가(테스트 선작성 빨간불 → 초록). CartPage·cart-store·CSS module·페이지 테스트 변경 → **cart 관련 13개만 정밀 선택**. 선택 13개는 cart-store를 import하는 5곳(CartPage·상품 카드의 담기 버튼·header 배지·OrderForm·providers)의 정적 사슬로 전부 설명되고 — HomePage·home-error가 포함된 이유도 홈 상품 카드의 담기 버튼이다. 제외 12개의 무관성: orders-page(내역은 API 조회)·my-page·로그인 계열·search-params(무관 도메인)·wishlist/checkout-store(자기 스토어만 검증)·API route 4개(클라이언트 store와 정적 무관 — 주문 흐름은 같은 run의 핵심 E2E가 커버). 같은 CSS라도 컴포넌트가 import하는 CartPage.module.css는 그래프 안(3개 선택), 전역 home.css는 그래프 밖(전체 폴백)이라는 대비도 확보했다.
 - **작업(dev·통합) 브랜치 정책** — 검증은 PR 단위다: 브랜치 직접 push는 workflow를 트리거하지 않고(`on.push`는 main뿐), 작업 브랜치 **대상** PR은 기본 검사·관련 integration을 그대로 실행하며 E2E만 생략한다(2차의 PR #8 실증 — unit 21·관련 8 실행 로그). dev에 쌓인 변경을 main으로 올리는 PR은 누적 전체 diff로 판별되어 그 시점에 핵심 E2E가 걸린다.
+
+## 3단계 — env 게이트
+
+### 게이트 구성
+
+`pnpm build`가 `node scripts/week-10-ci/validate-env.mjs && next build`라서, build를 실행하는 모든 경로(CI build-e2e job·Vercel Preview·Production 원격 빌드·로컬)가 같은 검증을 build 시작 전에 통과해야 한다. 환경 구분은 NODE_ENV가 아니라 Vercel이 주입하는 `VERCEL_ENV`로 하고, CI는 `.env.example`을 복사한 격리 테스트값으로 검증 경로까지 실행한다 — 배포로 이어지는 Vercel 원격 빌드가 각 환경의 실제 값으로 재검증한다. 오류에는 변수명·이유만 출력하고 값은 출력하지 않는다(실행 검사 18케이스에 비노출 단언 포함).
+
+### required 판단 — 별도 check를 만들지 않았다
+
+| 축 | 근거 |
+|---|---|
+| 실행 비용 | CI 실측 약 0.1초 (run 34487715872 Build step: 14:15:24.697 시작 → 24.796 PASS). Vercel 원격 빌드에서도 약 0.16초 |
+| 실패 변동성 | 결정적 — 네트워크·외부 서비스 의존이 없는 스키마 검증이라 flaky 요인이 없다 |
+| 현재 실패 리스크 | 오설정일 때만 실패. 정상 상태 오탐 0 (PR #18 초록 실증) |
+
+env 검사는 build-e2e job의 Build step 앞단이므로 실패가 그대로 build-e2e 실패 → 이미 required인 guard 실패로 전파된다. 0.1초짜리 검사에 별도 required check·job을 만들면 관리 비용만 늘어 기존 guard 전파로 충분하다고 판단했다.
+
+### 실증 기록 (2026-09-10)
+
+- **정상 PR 초록** — [PR #18](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/18) (`8606734c`), [run 34487715872](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34487715872): changes·checks·build-e2e·guard 전부 통과, deploy는 PR이라 의도된 생략. Vercel Preview 배포도 성공 — 정상 설정에서 게이트가 소음을 만들지 않는다.
+- **오류 PR 빨간불·병합 차단** — [PR #19](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/19) (`186fbd90`, 머지 금지 실험): `.env.example`에 `APP_ORIGIN=ftp://…`(http/https 외)와 `NEXT_PUBLIC_AUTH_SESSION_SECRET=`(비밀 변수의 공개 접두 변형, 빈 값) 주입. [run 34488205085](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34488205085)에서 Build step이 두 오류의 변수명·이유를 출력하고 exit 1 — `next build` 미시작(로그에 "Creating an optimized production build" 없음), build-e2e FAIL → guard FAIL → PR `BLOCKED`. **checks job(unit·lint·typecheck·CLI integration)은 같은 run에서 통과** — env 오류가 build 게이트에서만 정확히 걸리는 층 분리.
+- **Vercel 배포 단계 차단** — 같은 실험 PR에서 Preview 환경변수 `APP_ORIGIN`을 타 환경 주소(`https://loop-pack-fe-l2-vol1.vercel.app`)로 오설정하고 커밋 `e213d02d`로 재배포를 트리거: Vercel 원격 빌드가 `env 검증 실패(preview) — APP_ORIGIN: 이 환경의 배포 주소와 다르다`로 실패(배포 `dpl_6DaajmGVWKpQzGMT94o4niF5ABkP`), PR의 Vercel check가 빨간불로 표시됐다. 실제 값 재검증이 CI 테스트값 성공과 별개로 동작한다는 증거. 빌드 로그 화면: ![Vercel Preview env 검증 실패](./images/week10-env-gate-vercel-fail.png)
+- **실험 잔재 원복** — Preview의 오설정 `APP_ORIGIN` 제거 완료(`vercel env rm`), 실험 PR은 머지 없이 닫는다. `.env.example` 오류값은 실험 브랜치에만 있다.
+- **남은 대기** — Production 게시 차단의 실전 증명: PR #18 머지 시점에 Production env를 일시 오설정해 deploy job의 Vercel 원격 빌드 실패 → 기존 Production 유지 → 원복 후 재배포 성공까지 한 흐름으로 확인한다(코드 설정만으로 완료 표시하지 않는다는 티켓 기준).
