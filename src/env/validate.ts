@@ -86,15 +86,19 @@ function validateEnv(stage: 'build' | 'server') {
       );
   const summary = `## env 검증: ${result.success ? 'PASS' : 'FAIL'} (${stage}/${target})\n${problems.map((problem) => `- ${problem}\n`).join('')}`;
 
-  // CI에서만 리포트를 남긴다. 같은 파일을 PR 코멘트가 그대로 실어
-  // 변수명·이유가 원시 로그 밖에서도 읽힌다.
+  // 리포트는 덮어쓰기라 next build가 설정을 여러 번 로딩해도 하나만 남는다.
+  // PR 코멘트가 이 파일을 그대로 실어 변수명·이유가 원시 로그 밖에서도 읽힌다.
   if (process.env.GITHUB_STEP_SUMMARY) {
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
     mkdirSync('reports', { recursive: true });
     writeFileSync('reports/env.md', `${summary}\n`);
   }
 
   if (!result.success) {
+    // summary는 append라 PASS까지 쓰면 설정 로딩 횟수만큼 중복된다(실측 3회).
+    // 성공한 build의 PASS 한 줄은 Build step이 한 번만 기록한다.
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+    }
     throw new Error(
       `env 검증 실패(${stage}/${target}) — ${problems.join('; ')}`,
     );

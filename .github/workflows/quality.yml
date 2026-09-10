@@ -187,7 +187,6 @@ jobs:
         run: pnpm exec playwright install-deps chromium
       # pnpm build는 next.config의 빌드용 env 검증 후 production build를 진행하고,
       # build 후에는 기존 산출물로 서버 env 실행 검사를 한다 — draft·문서 전용도 실행한다.
-      # Vercel 원격 빌드는 빌드용 env를 검증하고, Production 후보의 서버 env는 승격 전 API 요청으로 검증한다.
       # 이 빌드는 배포되지 않아 로컬 템플릿(.env.example) 값으로 검증 경로까지 실행한다
       # — 새 변수는 템플릿·스키마만 고치면 되고, 템플릿이 낡으면 이 빌드가 실패해 드러난다.
       # 배포 빌드는 실제 빌드용 값으로, 서버 시작은 instrumentation에서 실제 서버용 값으로 검증한다.
@@ -196,6 +195,7 @@ jobs:
         run: |
           cp .env.example .env
           pnpm build
+          printf '## env 검증: PASS (build/local)\n\n' >> "$GITHUB_STEP_SUMMARY"
       # "이 PR이 얼마나 늘렸나"를 코멘트에 싣기 위한 기준선. main push가 남긴 측정값을 받아온다.
       # base SHA가 정확히 맞으면 그것을, 없으면 가장 최근 main 측정을 쓴다. 없어도 판정은 그대로다.
       - name: Restore main budget baseline
