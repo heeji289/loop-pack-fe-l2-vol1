@@ -277,7 +277,7 @@ PR의 이전 run 취소는 문서 마감 커밋 두 건을 시차를 두고 push
 
 `guard`는 변경 판별·기본 검사·build·E2E 결과를 대조한다. 필요한 E2E가 실패하거나 예상과 달리 생략되면 실패하고, 의도한 생략일 때만 성공한다. 변경 판별이 실패해도 기본 검사와 build는 실행하도록 했다.
 
-**main의 required 설정은 일부 적용했다.** strict(최신 main 반영 요구)와 `checks`는 적용했고, `guard`는 체크 이름이 첫 실행 전에는 설정 화면에 나타나지 않아 구현 PR의 첫 CI 실행 후 required에 추가한다. 다른 PR이 먼저 병합되면 남은 PR도 main을 반영한 뒤 다시 검증해야 한다. 개인 소유 fork는 merge queue 지원 대상이 아니어서 `merge_group` 대신 이 방식을 선택했다. 지원 범위와 근거는 [스펙](../../specs/260910-week10-step2-conditional-ci.spec.md#further-notes)에 남겼다.
+**main의 required 설정은 적용 완료다.** strict(최신 main 반영 요구)와 `checks`·`guard`를 required로 연결했다. guard는 체크 이름이 첫 실행 전에는 설정 화면에 나타나지 않아 구현 PR의 첫 CI 실행 뒤에 추가했다. 다른 PR이 먼저 병합되면 남은 PR도 main을 반영한 뒤 다시 검증해야 한다. 개인 소유 fork는 merge queue 지원 대상이 아니어서 `merge_group` 대신 이 방식을 선택했다. 지원 범위와 근거는 [스펙](../../specs/260910-week10-step2-conditional-ci.spec.md#further-notes)에 남겼다.
 
 ### 전체 E2E와 Production 배포
 
@@ -331,3 +331,11 @@ Lighthouse는 정기·수동 실행에서 홈과 상품 목록을 각각 3회 �
 - **수동 dispatch** — run 34442293948(workflow_dispatch, main): 전체 E2E 16개·Lighthouse 홈·상품 각 3회 성공, 리포트 artifact 업로드, deploy skipped.
 - **측정** — 같은 내용 계열 커밋·같은 날 CI에서 각 3회. integration step: 관련 선택(2개) 6/6/5초(중앙 6) vs 전체(25개) 16/17/16초(중앙 16) — 구간 비겹침, 10초·63% 단축. checks job 전체: 52 vs 64초(중앙값). 판별 비용: changes job 8/6/11초(중앙 8, 병렬 job이라 wall-clock에 거의 흡수). 선택 사례는 소형 diff 기준이며 전체 영향 경로가 섞인 PR은 폴백으로 이득이 없다 — related는 측정과 무관하게 기본 정책(ADR-7).
 - **남은 대기**: 실제 첫 schedule run(월 03:30 KST), freshness 경쟁 재현(타이밍 의존·선택), flaky 발생 시 기록.
+
+### 실증 기록 3차 (2026-09-10) — 실제 변경 기반 재실증
+
+주석 변경만으로는 "실제 변경이 올바른 테스트를 만나는지"의 증거가 약해, 실사용 변경 두 건으로 다시 검증했다.
+
+- **로그인 화면 가운데 정렬** — [PR #12](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/12), run 34443456604. 실제 디자인 결함 수정(1280px에서 왼쪽 정렬, before/after 스크린샷 확인). `home.css`는 root layout이 import해 테스트 그래프 밖이라 파일별 프로브가 관련 0개를 검출 → **integration 전체 폴백**(이유에 home.css 명시) + 핵심 E2E 실행. 합산 판별이었다면 LoginPage.tsx의 선택이 이 공백을 가렸을 사례가 실전에서 나왔다.
+- **장바구니 전체 선택** — [PR #13](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/13), run 34443836321. 실제 기능 추가(테스트 선작성 빨간불 → 초록). CartPage·cart-store·CSS module·페이지 테스트 변경 → **cart 관련 13개만 정밀 선택**. 선택 13개는 cart-store를 import하는 5곳(CartPage·상품 카드의 담기 버튼·header 배지·OrderForm·providers)의 정적 사슬로 전부 설명되고 — HomePage·home-error가 포함된 이유도 홈 상품 카드의 담기 버튼이다. 제외 12개의 무관성: orders-page(내역은 API 조회)·my-page·로그인 계열·search-params(무관 도메인)·wishlist/checkout-store(자기 스토어만 검증)·API route 4개(클라이언트 store와 정적 무관 — 주문 흐름은 같은 run의 핵심 E2E가 커버). 같은 CSS라도 컴포넌트가 import하는 CartPage.module.css는 그래프 안(3개 선택), 전역 home.css는 그래프 밖(전체 폴백)이라는 대비도 확보했다.
+- **작업(dev·통합) 브랜치 정책** — 검증은 PR 단위다: 브랜치 직접 push는 workflow를 트리거하지 않고(`on.push`는 main뿐), 작업 브랜치 **대상** PR은 기본 검사·관련 integration을 그대로 실행하며 E2E만 생략한다(2차의 PR #8 실증 — unit 21·관련 8 실행 로그). dev에 쌓인 변경을 main으로 올리는 PR은 누적 전체 diff로 판별되어 그 시점에 핵심 E2E가 걸린다.
