@@ -116,7 +116,7 @@ export function ProductList() {
         </p>
       )}
       {/* CI 조건부 실행 검증 실험용 임시 주석 — 실험 종료 시 제거 */}
-      <p>총 {visibleData.totalCount}개</p>
+      <p>총 {visibleData.totalCount + 1}개</p>
       {visibleData.totalCount === 0 ? (
         <p className="week05-empty">조건에 맞는 상품이 없습니다.</p>
       ) : (
