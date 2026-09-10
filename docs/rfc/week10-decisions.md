@@ -83,7 +83,7 @@
   - **size-limit 채택** (새 devDependency, 사용자 승인). 대상 확정: **홈·상품목록·상품상세 First Load JS + 공유 청크(shared by all) + hero 이미지 소스 파일** — 공유 청크는 전역 회귀(공통 모듈에 무거운 import) 검출용으로 빨간불 실험과 짝. 페이지 전수·총량 예산은 소음이라 제외. 임계값은 이번 주 실측 후 `현재값 + 측정 범위 + 여유폭 N%` 공식으로 본인이 결정 — 7주차 인용의 실체는 "전송 크기가 LCP를 지배한다는 발견의 회귀 방지".
   - **env 검증은 Zod 규칙을 공유하는 빌드/서버 검증 함수** (2026-09-11 사용자 요청으로 개정). APP_ORIGIN은 metadata와 요청 처리에 쓰여 양쪽에서, AUTH_SESSION_SECRET은 서버 시작에서 검증한다. 비밀 변수의 NEXT_PUBLIC_ 변형은 양쪽에서 거부한다. `next.config`의 개발/빌드 phase와 `instrumentation.register()`에 연결한다. Zod는 기존 버전의 dependencies로 이동하고 클라이언트 import는 하지 않는다. 이전 빌드 전 CLI만의 검증은 이 결정으로 대체한다.
   - **LCP·FCP·TTFB는 Lighthouse CI가 측정** (정기 + 수동). 2단계에서 홈·상품 목록의 기본 측정·리포트를 연결하고 3단계에서 assertion을 적용한다. assertion 임계값 근거 = **7주차 실측 LCP 값** (docs/week-07-performance rf-after) — "7주차 값 인용" 요구의 본류. 변동성 대응은 numberOfRuns 3 중앙값.
-- **배포와의 연결 (2026-09-10 개정)**: ADR-9의 배포 전 전체 E2E를 유지하고 3단계 예산·env 검증도 필수 성공 조건에 추가한다. Lighthouse의 변동성 있는 측정은 PR required·Production 배포 차단 조건으로 사용하지 않는다.
+- **배포와의 연결 (2026-09-11 개정)**: ADR-9의 배포 전 전체 E2E를 유지하고 3단계 예산·env 검증도 필수 성공 조건에 추가한다. env는 모든 PR의 실제 서버 실행 검사와 Production 후보의 동적 API 검증으로 보완한다. `--prod --skip-domain` 후보가 통과하고 main SHA가 여전히 같을 때 동일 배포만 promote한다. Lighthouse의 변동성 있는 측정은 PR required·Production 배포 차단 조건으로 사용하지 않는다.
 
 ## ADR-11. AI 리뷰: 두 모드 구도, CI 통합(advisory, PR 코멘트)
 
