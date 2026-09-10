@@ -1,7 +1,7 @@
 name: Quality
 
 # 실행 정책:
-# - 모든 PR: lint·typecheck·unit 전체·CLI integration 전체·변경 관련 앱 integration·빌드용 env 검증→production build→서버 env 실행 검사
+# - 모든 PR: lint·typecheck·unit 전체·CLI integration 전체·변경 관련 앱 integration·빌드용 env 검증→production build→번들 예산 검사→서버 env 실행 검사
 #   (CI는 .env.example 값으로 검증하고, 배포로 이어지는 Vercel 원격 빌드가 각 환경의 실제 값으로 재검증)
 # - main 대상 · non-draft · 런타임 변경 PR: + 핵심 E2E(@critical 3개)
 # - main push: 전체 검증(통합·E2E 5종) 성공 후 같은 SHA를 Production에 배포
@@ -222,6 +222,11 @@ jobs:
           cp .env.example .env
           pnpm build
           printf '## env 검증: PASS (build/local)\n\n' >> "$GITHUB_STEP_SUMMARY"
+      # 예산 검사는 build와 분리된 step이다 — build는 산출물을 만들고, 이 step이 정책으로 판정한다.
+      # draft·문서 전용·캐시 hit도 예외 없이 실행한다. 실패는 build-e2e 실패 → guard 실패로 전파된다.
+      - name: Bundle budget
+        id: budget
+        run: pnpm check:budget
       - name: Server env lifecycle
         run: node scripts/week-10-ci/check-env-lifecycle.mjs
       - name: Core E2E (@critical)
