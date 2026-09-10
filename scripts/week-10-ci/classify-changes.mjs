@@ -4,9 +4,6 @@
 // 조회 실패·목록 누락은 생략 성공이 아니라 판별 실패(exit 1)다.
 import { appendFileSync } from 'node:fs';
 
-// 판별 실패 재현 실험 — 즉시 제거 예정
-fail('판별 실패 재현 실험');
-
 const fail = (message) => {
   console.error(`::error::변경 판별 실패 — ${message}`);
   process.exit(1);
