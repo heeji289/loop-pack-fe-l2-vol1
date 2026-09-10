@@ -1,4 +1,4 @@
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 
 import { z } from 'zod';
 
@@ -86,8 +86,12 @@ function validateEnv(stage: 'build' | 'server') {
       );
   const summary = `## env 검증: ${result.success ? 'PASS' : 'FAIL'} (${stage}/${target})\n${problems.map((problem) => `- ${problem}\n`).join('')}`;
 
+  // CI에서만 리포트를 남긴다. 같은 파일을 PR 코멘트가 그대로 실어
+  // 변수명·이유가 원시 로그 밖에서도 읽힌다.
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+    mkdirSync('reports', { recursive: true });
+    writeFileSync('reports/env.md', `${summary}\n`);
   }
 
   if (!result.success) {

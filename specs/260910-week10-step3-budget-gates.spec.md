@@ -140,18 +140,22 @@ LCP·CLS 임계값은 위 값과 현재 CI 분포를 비교한 뒤 정한다. �
 
 두 채널은 같은 검증 결과를 사용한다. 표시를 위해 검사를 다시 실행하지 않는다.
 
-| 채널        | 표시 내용                                                                                         |
-| ----------- | ------------------------------------------------------------------------------------------------- |
-| PR 코멘트   | 검사 상태, 예산 대상·단위·측정값·임계값·초과량·초과율, env 오류 이유, 검증 SHA, 상세 summary 링크 |
-| Job summary | 전체 측정표, 선택 테스트·생략 이유·flaky, 실패 리포트·trace 링크, run·배포 결과                   |
+| 채널        | 표시 내용                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------ |
+| PR 코멘트   | 검사 상태, 예산 대상·단위·측정값·base 대비 증가량·임계값·초과량·초과율, env 오류 이유, 검증 SHA, 상세 summary 링크 |
+| Job summary | 전체 측정표, 선택 테스트·생략 이유·flaky, 실패 리포트·trace 링크, run·배포 결과                                    |
 
 실패해도 가능한 결과를 남긴다. 선행 실패로 측정하지 못한 항목에는 미측정과 이유를 표시한다. 배포한 경우에만 해당 SHA의 배포 URL을 연결한다.
 
 PR마다 식별 마커와 봇 작성자로 찾은 코멘트 하나를 갱신한다. 새 push·재실행·실패 복구 때 댓글을 추가하지 않으며, 최신 PR head와 run/attempt를 확인해 오래된 결과가 덮어쓰지 않게 한다. 실행별 기록은 summary에 보존한다. 게시 수단은 기존 GitHub CLI/API로 충분하면 재사용한다.
 
-코멘트 게시 job에만 pull-requests: write를 부여하고, 이 job은 PR 코드를 실행하지 않고 검증 결과를 데이터로 처리한다. 외부 fork PR 등 쓰기 불가 상황은 summary에 코멘트 생략 이유를 남긴다. pull_request_target이나 별도 고권한 토큰으로 우회하지 않는다. [GitHub 권한 문서](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions).
+**2026-09-11 변경 합의 — 게시를 `workflow_run` 워크플로로 분리한다.** `pull_request` 이벤트에서는 workflow 파일과 스크립트가 모두 PR이 고칠 수 있는 코드라, 같은 이벤트 안에서는 "PR 코드를 실행하지 않는 게시 job"을 만들 수 없다. Quality 완료를 받는 별도 `workflow_run` 워크플로가 default branch의 코드만 실행하고, 결과는 Quality가 올린 리포트 artifact와 job 결론 API로 받는다. 코멘트 게시 워크플로에만 pull-requests: write를 두고, Quality의 job에는 주지 않는다. pull_request_target이나 별도 고권한 토큰으로 우회하지 않는다. [GitHub 권한 문서](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions).
 
-게시 실패는 summary에 표시하고 기존 검증 결과를 유지한다. 댓글 전송 자체를 required로 만들지 않는다. PR이 없는 main·정기·수동 실행은 summary만 생성한다.
+이 분리로 외부 fork PR도 코멘트를 받는다. 대신 리포트 파일은 PR 코드가 만든 신뢰할 수 없는 입력이므로, 게시 전에 코멘트 마커 위조와 멘션을 무력화하고 길이를 제한한다. 표는 그대로 렌더링한다.
+
+**base 대비 증가량**은 main push가 남긴 측정값을 캐시로 받아 예산 검사가 직접 계산한다. 기준선이 없으면 열을 생략하고 그 사실을 적으며, 판정 자체는 고정 상한으로만 한다 — base를 다시 빌드하지 않는다.
+
+게시 실패는 summary에 표시하고 기존 검증 결과를 유지한다. 댓글 전송 자체를 required로 만들지 않는다. PR이 없는 main·정기·수동 실행은 summary만 생성한다. `workflow_run`은 default branch의 워크플로만 실행하므로, 게시 동작은 이 변경이 main에 병합된 뒤부터 확인할 수 있다.
 
 ## Testing Decisions
 

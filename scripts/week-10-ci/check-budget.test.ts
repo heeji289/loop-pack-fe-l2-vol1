@@ -96,18 +96,40 @@ const FULL_LIMITS = {
   'shared-js': SIZE.shared,
 };
 
-const runCheckBudget = (root: string, limitsPath: string) => {
+const runCheckBudget = (
+  root: string,
+  limitsPath: string,
+  baselinePath = join(root, 'no-baseline.json'),
+) => {
   const result = spawnSync(process.execPath, [SCRIPT_PATH], {
     encoding: 'utf8',
     env: {
       ...process.env,
       BUDGET_ROOT: root,
       BUDGET_LIMITS_FILE: limitsPath,
+      BUDGET_BASELINE_FILE: baselinePath,
       GITHUB_STEP_SUMMARY: '',
     },
   });
 
   return { status: result.status, output: result.stdout + result.stderr };
+};
+
+const writeBaseline = (
+  root: string,
+  sizes: Record<string, number>,
+  sha = 'c0ffee1234567890',
+): string => {
+  const path = join(root, 'baseline.json');
+  writeFileSync(
+    path,
+    JSON.stringify({
+      sha,
+      rows: Object.entries(sizes).map(([id, size]) => ({ id, size })),
+    }),
+  );
+
+  return path;
 };
 
 // summary와 PR 코멘트가 함께 쓰는 결과 파일.
@@ -183,6 +205,55 @@ it('빌드 산출물이 없으면 실패한다', TIMEOUT, () => {
 
   expect(status).toBe(1);
   expect(output).toContain('번들 예산: 미측정');
+});
+
+it(
+  'main 기준선이 있으면 base 대비 증가량과 기준 SHA를 표시한다',
+  TIMEOUT,
+  () => {
+    const root = makeFixture();
+    const limits = writeLimits(root, FULL_LIMITS);
+    const baseline = writeBaseline(root, {
+      'home-initial-js': SIZE.home - 1000,
+      'products-initial-js': SIZE.products,
+    });
+
+    const { status, output } = runCheckBudget(root, limits, baseline);
+
+    expect(status).toBe(0);
+    expect(output).toContain('+1,000 B');
+    expect(output).toContain('변화 없음');
+    // 기준선에 없는 대상은 증가량을 지어내지 않는다.
+    expect(output).toContain('기준선 없음');
+    expect(output).toContain('main `c0ffee1`');
+  },
+);
+
+it('main 기준선이 없으면 증가량 열 없이 판정만 한다', TIMEOUT, () => {
+  const root = makeFixture();
+  const limits = writeLimits(root, FULL_LIMITS);
+
+  const { status, output } = runCheckBudget(root, limits);
+
+  expect(status).toBe(0);
+  expect(output).toContain('base 기준선이 없어 증가량은 비교하지 않았다');
+  expect(output).not.toContain('base 대비');
+});
+
+it('다음 PR의 기준선으로 쓸 측정값을 남긴다', TIMEOUT, () => {
+  const root = makeFixture();
+  const limits = writeLimits(root, FULL_LIMITS);
+
+  runCheckBudget(root, limits);
+  const saved = JSON.parse(
+    readFileSync(join(root, 'reports/budget.json'), 'utf8'),
+  ) as { rows: { id: string; size: number }[] };
+
+  expect(saved.rows).toEqual([
+    { id: 'home-initial-js', size: SIZE.home },
+    { id: 'products-initial-js', size: SIZE.products },
+    { id: 'shared-js', size: SIZE.shared },
+  ]);
 });
 
 it('임계값이 누락된 대상이 있으면 실패한다', TIMEOUT, () => {

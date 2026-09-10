@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -16,7 +16,20 @@ const env = {
   GITHUB_STEP_SUMMARY: '',
 };
 
+// PR 코멘트가 실을 최종 판정. 서버 기동 출력은 싣지 않고 실패한 검사 이름만 남긴다.
+const writeVerdict = (markdown) => {
+  console.log(markdown);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${markdown}\n`);
+  }
+  mkdirSync('reports', { recursive: true });
+  writeFileSync('reports/env.md', markdown);
+};
+
+let running = '';
+
 async function check(name, overrides, expectedError) {
+  running = name;
   const child = spawn(
     process.execPath,
     [cli, 'start', '--hostname', '127.0.0.1', '--port', '41413'],
@@ -71,25 +84,27 @@ async function check(name, overrides, expectedError) {
   }
 }
 
-await check(
-  '빈 시크릿이면 시작 실패',
-  { AUTH_SESSION_SECRET: '' },
-  /env 검증 실패\(server\/local\).*AUTH_SESSION_SECRET/,
-);
-await check(
-  '잘못된 origin이면 시작 실패',
-  { APP_ORIGIN: 'ftp://invalid.example' },
-  /env 검증 실패\(server\/local\).*APP_ORIGIN/,
-);
-await check(
-  '비밀 공개 변수면 시작 실패',
-  { NEXT_PUBLIC_AUTH_SESSION_SECRET: '' },
-  /NEXT_PUBLIC_AUTH_SESSION_SECRET/,
-);
-await check('실제 CI env로 시작하고 동적 API 응답', {});
-if (process.env.GITHUB_STEP_SUMMARY) {
-  appendFileSync(
-    process.env.GITHUB_STEP_SUMMARY,
-    '## 서버 env 실행 검사: PASS\n\n실제 next start의 오류 3종 종료 코드 1·정상 인증 API 상태/본문 확인.\n',
+try {
+  await check(
+    '빈 시크릿이면 시작 실패',
+    { AUTH_SESSION_SECRET: '' },
+    /env 검증 실패\(server\/local\).*AUTH_SESSION_SECRET/,
   );
+  await check(
+    '잘못된 origin이면 시작 실패',
+    { APP_ORIGIN: 'ftp://invalid.example' },
+    /env 검증 실패\(server\/local\).*APP_ORIGIN/,
+  );
+  await check(
+    '비밀 공개 변수면 시작 실패',
+    { NEXT_PUBLIC_AUTH_SESSION_SECRET: '' },
+    /NEXT_PUBLIC_AUTH_SESSION_SECRET/,
+  );
+  await check('실제 CI env로 시작하고 동적 API 응답', {});
+  writeVerdict(
+    '## env 검증: PASS\n\n빌드용 통과. 실제 next start의 오류 3종 종료 코드 1·정상 인증 API 상태/본문 확인.\n',
+  );
+} catch (error) {
+  writeVerdict(`## env 검증: FAIL (서버 실행)\n\n실패한 검사: ${running}\n`);
+  throw error;
 }

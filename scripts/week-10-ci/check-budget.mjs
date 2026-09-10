@@ -2,7 +2,12 @@
 // 결과를 summary·리포트로 남기고 원래 종료 상태를 보존한다 — 출력이 게이트 결과를 덮지 않는다.
 // 예산 대상 누락·수집 실패·임계값 없음은 모두 실패다.
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 import { BUDGET_TARGETS, MEASURE_LABEL } from './budget-targets.mjs';
@@ -83,25 +88,86 @@ for (const { id, label } of BUDGET_TARGETS) {
   });
 }
 
+// 고정 상한 판정과 별개로 "이 변경이 얼마나 늘렸나"를 함께 보여준다.
+// 기준선은 main push가 남긴 측정값이라 없을 수도 있다 — 그러면 열을 생략한다.
+let baseline = null;
+try {
+  baseline = JSON.parse(
+    readFileSync(
+      process.env.BUDGET_BASELINE_FILE ?? join(root, 'baseline/budget.json'),
+      'utf8',
+    ),
+  );
+} catch {
+  baseline = null;
+}
+
+const signed = (bytes) =>
+  `${bytes > 0 ? '+' : bytes < 0 ? '−' : '±'}${Math.abs(bytes).toLocaleString()} B`;
+
+const changeCell = (row) => {
+  const before = baseline?.rows?.find((entry) => entry.id === row.id)?.size;
+  if (typeof before !== 'number') return '기준선 없음';
+  const change = row.size - before;
+  if (change === 0) return '변화 없음';
+  return `${signed(change)} (${change > 0 ? '+' : '−'}${Math.abs((change / before) * 100).toFixed(1)}%)`;
+};
+
+const columns = ['대상', '집계', '측정값'];
+if (baseline) columns.push(`base 대비`);
+columns.push('임계값', '여유/초과', '판정');
+
 const table = [
-  '| 대상 | 집계 | 측정값 | 임계값 | 여유/초과 | 판정 |',
-  '| --- | --- | --- | --- | --- | --- |',
+  `| ${columns.join(' | ')} |`,
+  `| ${columns.map(() => '---').join(' | ')} |`,
   ...rows.map((row) => {
     if (row.missing) {
-      return `| ${row.label} | ${MEASURE_LABEL} | 미측정 | — | — | ❌ |`;
+      const cells = [row.label, MEASURE_LABEL, '미측정'];
+      if (baseline) cells.push('—');
+      return `| ${[...cells, '—', '—', '❌'].join(' | ')} |`;
     }
-    const delta = row.limit - row.size;
-    const deltaText =
-      delta >= 0
-        ? `여유 ${delta.toLocaleString()} B`
-        : `**초과 ${(-delta).toLocaleString()} B (+${((-delta / row.limit) * 100).toFixed(1)}%)**`;
-    return `| ${row.label} | ${MEASURE_LABEL} | ${row.size.toLocaleString()} B (${kib(row.size)}) | ${row.limit.toLocaleString()} B | ${deltaText} | ${row.passed ? '✅' : '❌'} |`;
+    const headroom = row.limit - row.size;
+    const headroomText =
+      headroom >= 0
+        ? `여유 ${headroom.toLocaleString()} B`
+        : `**초과 ${(-headroom).toLocaleString()} B (+${((-headroom / row.limit) * 100).toFixed(1)}%)**`;
+    const cells = [
+      row.label,
+      MEASURE_LABEL,
+      `${row.size.toLocaleString()} B (${kib(row.size)})`,
+    ];
+    if (baseline) cells.push(changeCell(row));
+    cells.push(
+      `${row.limit.toLocaleString()} B`,
+      headroomText,
+      row.passed ? '✅' : '❌',
+    );
+    return `| ${cells.join(' | ')} |`;
   }),
 ].join('\n');
 
+const baselineNote = baseline
+  ? `\nbase 대비는 main \`${(baseline.sha || '알 수 없음').slice(0, 7)}\`의 같은 측정과 비교한 값이다.\n`
+  : '\nbase 기준선이 없어 증가량은 비교하지 않았다.\n';
+
 const allPassed = sizeLimit.status === 0 && problems.length === 0;
 writeSummary(
-  `## 번들 예산: ${allPassed ? 'PASS' : 'FAIL'}\n\n${table}\n\n측정값은 CI의 고정 압축 집계이며 실제 HTTP 전송량과 다르다.\n`,
+  `## 번들 예산: ${allPassed ? 'PASS' : 'FAIL'}\n\n${table}\n\n측정값은 CI의 고정 압축 집계이며 실제 HTTP 전송량과 다르다.\n${baselineNote}`,
+);
+
+// 다음 PR의 기준선. main push의 이 파일을 캐시에 담아 PR이 내려받는다.
+writeFileSync(
+  join(root, 'reports/budget.json'),
+  JSON.stringify(
+    {
+      sha: process.env.GITHUB_SHA ?? '',
+      rows: rows
+        .filter((row) => !row.missing)
+        .map(({ id, size }) => ({ id, size })),
+    },
+    null,
+    2,
+  ),
 );
 
 for (const problem of problems) console.error(`::error::${problem}`);
