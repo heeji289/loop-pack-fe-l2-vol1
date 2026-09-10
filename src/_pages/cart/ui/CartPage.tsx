@@ -32,6 +32,7 @@ function CartContent() {
     refetch: refetchSession,
   } = useQuery(sessionQueries.me());
   const items = useCart((cart) => cart.items);
+  const { setAllChecked } = useCartActions();
   const { createCheckoutDraft } = useCheckoutActions();
 
   const {
@@ -82,6 +83,10 @@ function CartContent() {
     selectedTotalPrice !== undefined &&
     user !== undefined;
 
+  const handleToggleAllChecked = () => {
+    setAllChecked(!items.every((item) => item.checked));
+  };
+
   const handlePurchaseClick = () => {
     if (!canPurchase) return;
 
@@ -130,6 +135,16 @@ function CartContent() {
 
       <div className={styles.layout}>
         <ul className={styles.list}>
+          <li className={styles.selectAllRow}>
+            <label className={styles.selectAllLabel}>
+              <input
+                type="checkbox"
+                checked={items.every((item) => item.checked)}
+                onChange={handleToggleAllChecked}
+              />
+              전체 선택
+            </label>
+          </li>
           {items.map((item) => (
             <CartItemRow
               key={item.productId}
