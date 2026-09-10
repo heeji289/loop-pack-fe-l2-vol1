@@ -387,7 +387,8 @@ jobs:
           fi
           # 소스를 올려 Vercel 원격 빌드로 배포한다 — 시크릿을 러너로 내려받지 않아
           # Sensitive 값이 [SENSITIVE] 자리표시자로 로컬 빌드에 새는 경로가 없다.
-          url=$(pnpm dlx "$VERCEL_CLI" deploy --prod --skip-domain --yes --token="$VERCEL_TOKEN")
+          deployment=$(pnpm dlx "$VERCEL_CLI" deploy --prod --skip-domain --yes --non-interactive --json --token="$VERCEL_TOKEN")
+          url=$(printf '%s' "$deployment" | jq -er '.deployment.url')
           node scripts/week-10-ci/check-deployment.mjs "$url"
           # 후보 검증 중 main이 전진했다면 운영 도메인을 바꾸지 않는다.
           latest=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/main | cut -f1)
