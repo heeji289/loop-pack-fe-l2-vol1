@@ -64,3 +64,5 @@ export function toSafeNextPath(next: string | null | undefined) {
     return '/';
   }
 }
+
+// CI base 재지정 실증용 임시 주석 — 실험 종료 시 브랜치 폐기
