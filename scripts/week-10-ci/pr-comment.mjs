@@ -98,10 +98,9 @@ try {
   const conclusionOf = (id) =>
     jobs.find((job) => job.name === id)?.conclusion ?? '미실행';
   const results = JOBS.map(([id, label]) => [label, conclusionOf(id)]);
-  // 의도적 생략(skipped)은 실패가 아니다. 판정 불가·취소는 실패로 본다.
-  const failed = results.some(
-    ([, conclusion]) => conclusion !== 'success' && conclusion !== 'skipped',
-  );
+  // 네 job은 모든 PR run에서 실행 조건이 참이라 skipped가 나올 수 없다.
+  // 나왔다면 그것이 곧 "예상 밖 생략"이므로 성공으로 바꾸지 않는다.
+  const failed = results.some(([, conclusion]) => conclusion !== 'success');
   const buildResult = conclusionOf('build-e2e');
   const unmeasured = (what) =>
     `## ${what}: 미측정\n\nbuild·env·E2E job이 ${buildResult} — 이 검사의 리포트가 없다.`;
