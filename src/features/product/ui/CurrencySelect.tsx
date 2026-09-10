@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { z } from 'zod';
 
 const CURRENCIES = [
   { code: 'KRW', label: '원 (KRW)' },
@@ -11,23 +10,19 @@ const CURRENCIES = [
 
 type Currency = (typeof CURRENCIES)[number];
 
-// 저장된 설정은 사용자가 고칠 수 있으므로 신뢰하지 않고 스키마로 검증한다.
-const storedCurrencySchema = z.object({
-  code: z.enum(['KRW', 'USD', 'JPY']),
-  updatedAt: z.iso.datetime(),
-});
-
+// 저장된 설정은 사용자가 고칠 수 있어 신뢰하지 않는다. 확인할 것이 "아는 코드인가"
+// 하나뿐이라 스키마 라이브러리를 클라이언트로 들이지 않고 목록 대조로 끝낸다.
 function readStoredCurrency(): Currency {
   try {
-    const parsed = storedCurrencySchema.safeParse(
-      JSON.parse(window.localStorage.getItem('commerce:currency') ?? ''),
+    const stored: unknown = JSON.parse(
+      window.localStorage.getItem('commerce:currency') ?? '',
     );
+    const code =
+      typeof stored === 'object' && stored !== null && 'code' in stored
+        ? stored.code
+        : null;
 
-    if (!parsed.success) return CURRENCIES[0];
-
-    return (
-      CURRENCIES.find((item) => item.code === parsed.data.code) ?? CURRENCIES[0]
-    );
+    return CURRENCIES.find((item) => item.code === code) ?? CURRENCIES[0];
   } catch {
     return CURRENCIES[0];
   }
