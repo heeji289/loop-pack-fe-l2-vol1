@@ -44,6 +44,7 @@
 - **변경 필터**: dorny/paths-filter를 SHA로 고정해 사용한다. 런타임과 무관함을 확인한 문서만 제외하고 소스·공통 UI·설정·정적 자산·lockfile·테스트·미분류 파일은 실행 대상으로 둔다. 파일 목록·영역 결과를 관련 integration 선택에도 재사용한다. 라벨은 도입하지 않는다.
 - **guard와 required**: 2단계에서 기본 checks와 PR guard를 fork main required로 연결한다. 판별·build·핵심 E2E 실패는 main 병합을 차단한다. 문서 전용·draft·main 외 PR의 E2E 생략은 이유를 보고한다. draft는 ready 전환 후 다시 검증한다. 판별 실패·파일 목록 누락은 성공으로 생략하지 않고 실패시킨다.
 - **선택 근거**: 개발 중에는 변경 관련 검증으로 비용을 줄이고, main 병합 전에 실패 비용이 큰 로그인·주문을 검증한다. 비핵심 브라우저 회귀는 배포 전 전체 E2E로 막고, 정기 측정으로 전체 흐름과 성능을 감시한다. 관련 integration은 실험 후 선택하는 후보가 아니라 기본 정책이다.
+- **유지 판단 (2026-09-11)**: [비교 측정](week10-e2e-cost.md)의 현재 추가 비용 약 11.77초만으로 전체 E2E를 PR required로 확대하지 않는다. 테스트 증가에 따라 PR 반복 실행 비용과 비핵심 flaky의 병합 차단 범위까지 함께 늘리지 않도록 실행 시점을 유지한다. 이는 향후 비용에 대한 설계 판단이며, 현재 flaky 증가를 관측했다는 뜻은 아니다. 비핵심 회귀의 main 유입에 따른 수정·원복·배포 재검증 비용은 수용하되, 배포 지연이 반복되거나 실패 영향이 커진 흐름은 핵심 편입을 재검토한다.
 - **안전 논리의 범위**: 핵심 회귀는 main 병합 전에, 전체 E2E가 검출하는 회귀는 Production 배포 전에 차단한다. 비핵심 회귀가 main에 들어갈 가능성까지 없앤다고 주장하지 않는다. main 유입 방지와 사용자 대상 배포 방지를 구분해 과제 문서에 설명한다.
 - **개정 이유**: 모든 코드 PR의 전체 E2E 정책을 사용자 지정 실행 시점 분리로 대체하고 changed-files·draft 생략을 추가했다. 정기 실행은 배포 전 게이트를 대신하지 않는다.
 - **merge queue 대체 확정 (2026-09-10)**: 현재 fork는 API상 개인(User) 소유 공개 저장소로 merge queue 지원 대상이 아니다. 개인 fork를 유지하고 main required checks를 strict로 설정한다. main이 바뀌면 PR에 최신 main을 반영하고 CI를 다시 통과해야 병합 가능하다. main 변경 자체로 모든 PR이 자동 재실행되는 것은 아니다. 전체 E2E의 실행 시점은 배포 전·정기로 유지한다. [GitHub strict checks](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches).
