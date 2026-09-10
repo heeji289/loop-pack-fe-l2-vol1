@@ -77,7 +77,7 @@
 - **2단계 완료 증거**: 비핵심 E2E 실패 시 배포가 시작되지 않고 기존 Production이 유지되는지 확인한다. 정상 실행은 전체 E2E 성공 뒤 같은 SHA가 배포되는지 확인한다. 실제 배포 연결이 없으면 배포 전 게이트 완료로 표시하지 않는다.
 - **의미**: main에 합쳐진 코드와 사용자에게 배포할 코드를 구분한다. 전체 E2E는 사후 검출이 아니라 Production 배포 차단 조건이다.
 
-## ADR-10. 예산 게이트 구성: size-limit + zod env 스크립트 + Lighthouse 임계값은 7주차 LCP 근거
+## ADR-10. 예산 게이트 구성: size-limit + Zod env 검증 + Lighthouse 임계값은 7주차 LCP 근거
 
 - **상태**: 합의 (2026-09-09)
 - **결정**:
@@ -115,6 +115,8 @@
 
 ## 5단계 승격 후보 풀 (1~10주차 과제 문서 스캔 반영, 최종 선택은 모드 2 AI 리뷰 결과와 대조 후)
 
+> **2026-09-10 재검토**: 아래 네 후보는 이전 조사 기록이며 전체 후보의 상한이 아니다. “유력”, “현재 위반 0 → 정상 통과 보장”, “인라인 객체/staleTime 누락 금지”를 검증된 결론으로 사용하지 않는다. 현재 위반이 없는 것과 룰의 정상 코드 통과는 다르다. 새 감사의 테스트/E2E/파일·구조 후보까지 AI·사람의 실제 반복 지적과 대조하고 성격에 맞는 ESLint 또는 CI 검사 수단을 선택한다. 5단계에서 하나만 승격하는 것과 4단계의 전체 rule·skill 정비를 구별한다.
+
 - **① HTTP 호출 위치 강제** — api-client 밖 `fetch`/`axios` + `'/api/...'` 리터럴 금지. 출처 삼중(week-03 API 분리, 05 팩토리, 09 401 단일화). 현재 위반 0 → 정상 통과 보장. **유력**
 - **② as 단언 제한** — week-01 "새 as 금지" + 최근 커밋의 반복 제거 이력. selector: `TSAsExpression`(as const 제외). 잔존 ~10곳 전수 검토로 룰 좁히기 필요(오탐 검증 과제와 부합)
 - **④ Query 옵션 계약** — useQuery 인라인 객체 금지 + `queryOptions`에 staleTime 누락 금지 (week-05·07 이중 출처)
@@ -131,6 +133,8 @@
 
 ## 실행 순서 (계획)
 
+> 4·5단계는 2026-09-10 재검토 초안이 아래 이전 요약에 우선한다. 학습 목록 전체 대조 → rule·skill 보완/연결 → 실제 리뷰/판정 → 프롬프트 개선 → 반복 규칙 선택/승격 순서다. 기존 C1~C9 조립이나 후보 풀 네 개만으로 범위를 닫지 않는다.
+
 0. **준비**: fork Actions 활성화 → feat/round-10 origin push → **통합 PR(feat/round-10→fork main) 머지** → Vercel 연동(Production=main) → fork secrets(Claude 토큰) → Docker 환경 확인
 1. **1단계 측정**: Before cold/warm 각 3회(gh cache delete + re-run) → 병목 지목 → 전략 적용(quality.yml 보강·ci.yml 삭제 포함) → After 재측정 → 캐시 hit/miss 실험(lockfile 원복) → `docs/rfc/week10-ci.md` 기록
 2. **2단계 조건부**: dorny/paths-filter·unit/integration 분류·관련 integration 선택 → main·non-draft·런타임 변경 핵심 E2E·guard·strict required 연결 → 실행/생략·draft 전환·base 재지정·병합 차단·main 갱신 후 재검증 PR 실험 → main 자동 Production 배포를 전체 E2E 성공 후 CI 게시로 전환·배포 차단 검증 → 주간·수동 전체 E2E와 Lighthouse 기본 측정 → related 실행 비용 기록
@@ -141,6 +145,8 @@
 7. **6단계 회고** + 질문 4개 답변 → 마무리 게이트(pnpm check, 실험 잔재 제거, AI 표기) → 제출 PR
 
 ## 4단계 프롬프트·회고 7절 재료 (1~9주차 AI 요구사항 스캔, 2026-09-09)
+
+> 이 절은 기존 부분 조사다. “조립이지 신작이 아님”은 신규 검토 절차를 금지하는 결정으로 사용하지 않는다. 추가 발제 대조 결과와 현재 스킬의 공백은 [요구사항 감사](week10-ai-review-requirements-audit.md)를 따른다. 10주차 발제 원본은 아직 미확보다.
 
 - **모드 2 리뷰 프롬프트는 조립이지 신작이 아님**: 3주차 `component-review` SKILL + 6주차 `architecture-review` SKILL이 이미 리뷰 지침 초안. 여기에 CONVENTIONS.md + 1주차 셀프리뷰 4단(any/as/@ts-ignore/eslint-disable 침묵 금지, 기존 유틸 중복 생성 금지) + 5·7주차(URL 규칙, 서버 응답 복사 금지) + 8·9주차(AI 생성 테스트의 단언·모킹 경계 검토)를 합쳐 조립.
 - **"잘 잡은 1/헛소리 1"의 선행 형식 존재**: 6주차 "AI 지적 중 수용/반려를 근거와 함께 기록" — 같은 형식 재사용. 헛소리 후보 최빈 지점은 7주차 경험상 "측정과 무관한 최적화 제안".
