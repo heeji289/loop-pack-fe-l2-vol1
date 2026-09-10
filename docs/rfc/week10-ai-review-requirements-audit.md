@@ -139,6 +139,8 @@ FSD는 이미 있는 architecture-review/ESLint를 정본으로 연결한다. �
 
 `.claude/rules/`가 자동으로 읽힌다고 가정하지 않기 위해 AGENTS.md 코드 규칙에 세 규칙 파일을 조건과 함께 한 줄로 걸어, Codex도 같은 경로로 찾게 했다.
 
+A11·R23은 [e2e-scope-review](../../.claude/skills/e2e-scope-review/SKILL.md)로 구현하고 AGENTS.md에서 연결한다.
+
 ## 현재 연결에서 확인한 구체적인 빈틈
 
 1. **테스트 검사 범위 불일치.** testing rule과 test-review의 테스트 파일 범위에는 `scripts/**/*.test.*`가 빠져 있다. ESLint의 Vitest 특화 규칙도 `{src,tests}/**/*.test.*`에만 적용된다. E2E가 test-review 대상이라는 사실과 skip/only/truthiness가 E2E에서도 lint로 차단된다는 것은 별개다. 기존 E2E 결과 검사는 실행 수/상태를 검사하지만 모든 테스트 코드 패턴의 정적 검사를 대체하지 않는다. test-review는 의도 출처에서 정적 검사 조건을 제외하므로, 새 CI/룰 회귀 검수에서는 **검사기의 입력 → 진단/exit code도 공개 동작으로 검토**하도록 적용 계약을 보완해야 한다.

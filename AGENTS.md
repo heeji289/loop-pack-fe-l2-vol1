@@ -38,6 +38,7 @@
 
 - 코드 작성은 @CONVENTIONS.md 를 따른다.
 - 테스트를 쓰면 [testing.md](.claude/rules/testing.md), 화면을 그리면 [rendering.md](.claude/rules/rendering.md), 성능을 이유로 들면 [performance.md](.claude/rules/performance.md)를 함께 읽는다.
+- E2E 범위를 정하거나 포함·제외 근거를 검토하면 [e2e-scope-review](.claude/skills/e2e-scope-review/SKILL.md)를 읽는다.
 
 ## 명령어
 
