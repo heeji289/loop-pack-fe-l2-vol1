@@ -184,12 +184,62 @@
 
 @media (max-width: 768px) {
   .layout {
+    --purchase-bar-height: 6rem;
+
     flex-direction: column;
+    padding-bottom: calc(
+      var(--purchase-bar-height) + env(safe-area-inset-bottom)
+    );
+  }
+
+  .list {
+    width: 100%;
+  }
+
+  .row {
+    flex-wrap: wrap;
+  }
+
+  .product {
+    flex-basis: 100%;
+    padding-right: 24px;
   }
 
   .summary {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 10;
     width: 100%;
-    position: static;
+    height: calc(var(--purchase-bar-height) + env(safe-area-inset-bottom));
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    border-radius: 0;
+    box-shadow: 0 -4px 16px rgb(0 0 0 / 6%);
+  }
+
+  .summaryTitle,
+  .summaryRow {
+    display: none;
+  }
+
+  .summaryTotal {
+    flex-direction: column;
+    align-items: flex-start;
+    padding-top: 0;
+    border-top: 0;
+    font-size: 14px;
+  }
+
+  .summaryTotal strong {
+    font-size: 18px;
+  }
+
+  .purchaseButton {
+    min-height: 48px;
+    padding-inline: 16px;
   }
 }
 
