@@ -71,6 +71,22 @@ describe('목록 조회', () => {
     expect(await screen.findByText(totalCountText)).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
+
+  // 조건이 그대로라 이전 목록이 아닌데도 조회는 진행 중인 상태다
+  it('같은 조건으로 다시 조회하는 동안 갱신 중임을 알리고 페이지 이동을 잠근다', async () => {
+    const { queryClient } = renderProductList();
+
+    expect(await screen.findByText(totalCountText)).toBeInTheDocument();
+
+    // 응답을 주지 않는 핸들러로 조회 중인 순간을 붙잡는다
+    server.use(http.get('*/api/products', () => delay('infinite')));
+    void queryClient.refetchQueries();
+
+    expect(
+      await screen.findByText(`${totalCountText} · 갱신 중`),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '다음' })).toBeDisabled();
+  });
 });
 
 describe('조건에 맞는 상품이 없을 때', () => {
