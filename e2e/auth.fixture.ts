@@ -29,7 +29,7 @@ export function getTestAccount(index: number): TestAccount {
 
 export async function submitLoginForm(page: Page, account: TestAccount) {
   await page.getByLabel('이메일').fill(account.email);
-  await page.getByLabel('비밀번호').fill(account.password);
+  await page.getByLabel('비밀번호').fill(account.password + '_wrong');
   await page.getByRole('button', { name: '로그인' }).click();
 }
 
