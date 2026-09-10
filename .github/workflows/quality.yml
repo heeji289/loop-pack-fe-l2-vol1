@@ -373,7 +373,7 @@ jobs:
             echo "::notice::main이 ${latest}로 전진했다 — 이 run(${GITHUB_SHA})은 배포를 건너뛴다."
             echo "superseded=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Deploy to Vercel Production
+      - name: Verify and promote Vercel Production candidate
         if: steps.freshness.outputs.superseded != 'true'
         env:
           VERCEL_CLI: vercel@59.14.0
@@ -387,7 +387,20 @@ jobs:
           fi
           # 소스를 올려 Vercel 원격 빌드로 배포한다 — 시크릿을 러너로 내려받지 않아
           # Sensitive 값이 [SENSITIVE] 자리표시자로 로컬 빌드에 새는 경로가 없다.
-          url=$(pnpm dlx "$VERCEL_CLI" deploy --prod --yes --token="$VERCEL_TOKEN")
+          deployment=$(pnpm dlx "$VERCEL_CLI" deploy --prod --skip-domain --yes --non-interactive --json --token="$VERCEL_TOKEN")
+          url=$(printf '%s' "$deployment" | jq -er '.deployment.url')
+          node scripts/week-10-ci/check-deployment.mjs "$url"
+          # 후보 검증 중 main이 전진했다면 운영 도메인을 바꾸지 않는다.
+          latest=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/main | cut -f1)
+          if [ -z "$latest" ]; then
+            echo "::error::승격 전 main SHA를 확인하지 못했다."
+            exit 1
+          fi
+          if [ "$latest" != "$GITHUB_SHA" ]; then
+            echo "::notice::main이 전진해 검증한 후보의 승격을 생략한다."
+            exit 0
+          fi
+          pnpm dlx "$VERCEL_CLI" promote "$url" --yes --token="$VERCEL_TOKEN"
           {
             echo "## Production 배포"
             echo "- 검증·배포 SHA: \`${GITHUB_SHA}\`"
