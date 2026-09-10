@@ -138,6 +138,7 @@ jobs:
     timeout-minutes: ${{ github.event_name == 'pull_request' && 15 || 30 }}
     outputs:
       core-e2e-expected: ${{ steps.e2e-scope.outputs.core }}
+      core-e2e-reason: ${{ steps.e2e-scope.outputs.reason }}
       core-e2e-outcome: ${{ steps.core-e2e.outcome }}
       full-e2e-outcome: ${{ steps.full-e2e.outcome }}
     steps:
@@ -157,6 +158,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       # 핵심 E2E 조건: main 대상 AND non-draft AND 런타임 관련 변경.
       # 문서 전용·draft·main 외 PR은 브라우저 준비와 E2E만 생략하고 build는 유지한다.
+      # 조건은 decide-e2e-scope.mjs 한 곳에만 있다 — guard는 재계산하지 않고 이 결정을 검증한다.
       - name: Decide E2E scope
         id: e2e-scope
         env:
@@ -165,36 +167,7 @@ jobs:
           IS_DRAFT: ${{ github.event.pull_request.draft }}
           RUNTIME: ${{ needs.changes.outputs.runtime }}
           CHANGES_RESULT: ${{ needs.changes.result }}
-        run: |
-          core=false
-          full=false
-          if [ "$EVENT_NAME" != "pull_request" ]; then
-            full=true
-          elif [ "$CHANGES_RESULT" != "success" ]; then
-            echo "## E2E: 실행 불가" >> "$GITHUB_STEP_SUMMARY"
-            echo "변경 판별 실패(${CHANGES_RESULT}) — 핵심 E2E 조건을 판정할 수 없다. guard가 병합을 차단한다." >> "$GITHUB_STEP_SUMMARY"
-          elif [ "$BASE_REF" = "main" ] && [ "$IS_DRAFT" = "false" ] && [ "$RUNTIME" = "true" ]; then
-            core=true
-          else
-            reasons=""
-            [ "$BASE_REF" != "main" ] && reasons="${reasons}main 외 브랜치 대상(base: ${BASE_REF}); "
-            [ "$IS_DRAFT" = "true" ] && reasons="${reasons}draft PR; "
-            [ "$RUNTIME" != "true" ] && reasons="${reasons}문서 전용 변경; "
-            echo "## E2E: 의도적 생략" >> "$GITHUB_STEP_SUMMARY"
-            echo "이유: ${reasons}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          browsers=false
-          if [ "$core" = "true" ] || [ "$full" = "true" ]; then
-            browsers=true
-          fi
-          periodic=false
-          if [ "$EVENT_NAME" = "schedule" ] || [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            periodic=true
-          fi
-          echo "core=${core}" >> "$GITHUB_OUTPUT"
-          echo "full=${full}" >> "$GITHUB_OUTPUT"
-          echo "browsers=${browsers}" >> "$GITHUB_OUTPUT"
-          echo "periodic=${periodic}" >> "$GITHUB_OUTPUT"
+        run: node scripts/week-10-ci/decide-e2e-scope.mjs
       - name: Get Playwright version
         id: playwright-version
         if: steps.e2e-scope.outputs.browsers == 'true'
@@ -341,8 +314,7 @@ jobs:
           RUNTIME: ${{ needs.changes.outputs.runtime }}
           CORE_EXPECTED: ${{ needs.build-e2e.outputs.core-e2e-expected }}
           CORE_OUTCOME: ${{ needs.build-e2e.outputs.core-e2e-outcome }}
-          BASE_REF: ${{ github.base_ref }}
-          IS_DRAFT: ${{ github.event.pull_request.draft }}
+          CORE_SKIP_REASON: ${{ needs.build-e2e.outputs.core-e2e-reason }}
         run: |
           fail() {
             echo "::error::guard 실패 — $1"
@@ -356,22 +328,19 @@ jobs:
             fail "판별 성공인데 runtime 출력이 비었다('${RUNTIME}') — 출력 누락을 생략 성공으로 바꾸지 않는다"
           fi
 
-          # 실행 조건을 독립 재계산해 실제 실행과 대조한다 — 조건 버그로 인한 침묵 생략 방지.
-          expected=false
-          if [ "$BASE_REF" = "main" ] && [ "$IS_DRAFT" = "false" ] && [ "$RUNTIME" = "true" ]; then
-            expected=true
-          fi
-          [ "$expected" = "$CORE_EXPECTED" ] || fail "핵심 E2E 조건 판정 불일치 (guard=${expected}, build-e2e=${CORE_EXPECTED})"
-          if [ "$expected" = "true" ]; then
+          # 실행 조건은 decide-e2e-scope.mjs가 판정하고 진리표 정책 테스트가 지킨다.
+          # guard는 재계산하지 않고, 선언된 결정이 실제 outcome과 맞는지만 대조한다 —
+          # 조건 버그로 인한 침묵 생략을 여기서 잡는다.
+          case "$CORE_EXPECTED" in
+            true|false) ;;
+            *) fail "핵심 E2E 결정이 true/false가 아니다('${CORE_EXPECTED}') — 출력 누락을 생략 성공으로 바꾸지 않는다" ;;
+          esac
+          if [ "$CORE_EXPECTED" = "true" ]; then
             [ "$CORE_OUTCOME" = "success" ] || fail "핵심 E2E가 성공이 아니다 (${CORE_OUTCOME})"
             echo "## guard: PASS — 핵심 E2E 실행·성공" >> "$GITHUB_STEP_SUMMARY"
           else
             [ "$CORE_OUTCOME" = "skipped" ] || fail "핵심 E2E가 조건 밖에서 실행됐다 (${CORE_OUTCOME}) — 조건 버그"
-            reasons=""
-            [ "$BASE_REF" != "main" ] && reasons="${reasons}main 외 브랜치 대상; "
-            [ "$IS_DRAFT" = "true" ] && reasons="${reasons}draft PR; "
-            [ "$RUNTIME" != "true" ] && reasons="${reasons}문서 전용 변경; "
-            echo "## guard: PASS — 핵심 E2E 의도적 생략 (${reasons})" >> "$GITHUB_STEP_SUMMARY"
+            echo "## guard: PASS — 핵심 E2E 의도적 생략 (${CORE_SKIP_REASON})" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   # 결과 게시는 PR Comment workflow(workflow_run)가 맡는다 — 이 workflow의 job은
