@@ -215,6 +215,7 @@ export async function review({
           /^(?:src|tests|e2e|scripts|types)\/.*\.(?:[cm]?[jt]sx?|json|css|md)$/.test(
             path,
           ) ||
+          /^\.github\/workflows\/.*\.ya?ml$/.test(path) ||
           /^[^/]+\.(?:json|[cm]?[jt]s)$/.test(path)),
     );
     phase = 'input_limit';
