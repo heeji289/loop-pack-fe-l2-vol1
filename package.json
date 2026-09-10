@@ -17,6 +17,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:unit": "vitest run --project unit-node --project unit-jsdom",
+    "test:integration": "vitest run --project integration-node --project integration-jsdom",
     "test:e2e": "playwright test",
     "test:mutation": "stryker run",
     "check": "pnpm test && pnpm lint && pnpm typecheck && pnpm build && pnpm test:e2e",

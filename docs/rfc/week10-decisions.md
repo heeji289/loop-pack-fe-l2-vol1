@@ -1,6 +1,6 @@
 # 10주차 결정 로그 (계획 그릴링 ADR)
 
-> 구현 전 계획 그릴링(2026-09-09)에서 합의한 결정 기록. 측정·실험 결과와 그에 따른 최종 판단은 week10-ci.md에 기록한다.
+> 구현 전 계획 그릴링(2026-09-09)에서 합의한 결정 기록. 2026-09-10 사용자가 지정한 PR 관련 통합 테스트·main 병합 전 핵심 E2E·배포 전 전체 E2E·정기 E2E/Lighthouse 정책으로 개정했다. 측정·실험 결과와 그에 따른 최종 판단은 week10-ci.md에 기록한다.
 
 ## ADR-1. workflow 정리: quality.yml 기준 통합, ci.yml 삭제
 
@@ -34,37 +34,47 @@
 - **상태**: 합의 (2026-09-09)
 - **결정**: (1) job 분리 등 wall-clock 전략은 Before 측정이 병목을 지목한 뒤 선택 — "측정이 전략을 고른다"를 결정 규칙으로 문서화, 예상 시나리오(직렬 pnpm check에서 E2E·build 최장 예상)만 사전 기록. (2) concurrency는 병목 전략이 아닌 낭비 방지로 분리 기록하고 도입 — `group`에 `github.ref` 포함, `cancel-in-progress`는 PR에서만(main push 취소 금지). 도입 근거는 upstream 본인 PR run 이력에서 연속 push로 겹쳐 돈 run 수를 실측해 인용.
 
-## ADR-6. 조건부 실행: 검증 3층 구조 (2단계 설계)
+## ADR-6. 조건부 실행: PR·main 병합·Production 배포·정기 검증 분리
 
-- **상태**: 합의 (2026-09-09)
-- **결정**:
-  - **층 1 (모든 PR, 무조건)**: lint · typecheck · unit test. integration은 기본 전체 실행하되 related-only 실험(ADR-7) 결과에 따라 조건부 채택 여부 재결정.
-  - **층 2 (코드·설정·lockfile 변경 PR)**: core E2E만 — 로그인·주문 스펙에 `@critical` 태그 + `--grep @critical`. **문서만 바뀐 PR은 E2E 전체 스킵** + guard job이 성공 보고(required 충돌 방지).
-  - **층 3 (최종 방어, 2026-09-09 재개정)**: fork `main` **push(=머지) 시 전체 E2E 5종** — 머지 직후 사후 검출. 기존 quality.yml의 `push: branches: [main]` 트리거와 그대로 정합. 온디맨드 단독안은 폐기.
-  - **층 4 (정기)**: **주 1회 schedule로 전체 E2E + Lighthouse**. `workflow_dispatch` 병행 트리거 유지. main이 default 브랜치이자 작업 최신 상태가 되면서 "schedule은 default 브랜치만" 제약이 자동 해소 — 별도 우회 불필요.
-- **근거**: core만 게이트하는 이유는 시간 절약(스펙당 몇 초)이 아니라 **신호 품질** — PR 게이트의 flaky 표면 축소 + 실패 비용 큰 흐름(로그인·주문)만 게이트. 문서만 PR 스킵의 안전 논리: 코드가 안 바뀌면 E2E가 검증할 런타임 변경이 없음. Lighthouse를 게이트 밖에 두는 근거: 측정 변동성(과제 권장과 일치).
-- **주의**: E2E 비용 대부분은 고정비(브라우저 설치 31초 + build)라 스펙 수 절감을 시간 성과로 서술하지 않기.
+- **상태**: 합의 (2026-09-10 사용자 지정 정책으로 재개정)
+- **모든 PR**: lint·typecheck·unit 전체·변경 관련 integration. production build도 유지한다. workflow 자체는 생략하지 않고, dorny/paths-filter로 job/step을 분기한다. draft에서도 기본 검증은 유지한다.
+- **main 병합 전**: main 대상 AND non-draft AND 런타임 관련 변경 PR에서 기존 로그인 성공·실패 2개와 주문 완료 1개를 `@critical`로 실행한다. draft·문서 전용·main 외 PR은 E2E를 생략한다. base 변경과 ready/draft 전환 이벤트에서 재판정·재실행한다. 회원가입·결제는 현재 앱에 구현된 독립 기능이 아니므로 추가하지 않는다.
+- **Production 배포 전**: main의 대상 SHA를 고정하고 기본 검사·전체 integration·production build·전체 E2E 5종을 실행한 뒤 성공한 SHA만 배포한다. 전체는 로그인·주문·세션 만료·상품 목록·Dialog다. 실패 시 기존 Production을 유지한다. main 자동 Production 배포와 병렬로 검사하던 방식은 ADR-9대로 대체한다.
+- **정기·수동**: 정기는 main, 수동은 선택한 브랜치에서 전체 E2E와 Lighthouse CI를 실행하고 배포하지 않는다. 작업 브랜치의 전체 검증도 병합 전에 실행할 수 있도록 수동 실행은 main으로 제한하지 않는다. 기본 주기는 매주 월요일 03:30 KST(일요일 18:30 UTC). 기본 Lighthouse 측정·리포트는 2단계에, assertion 임계값은 3단계에 둔다.
+- **변경 필터**: dorny/paths-filter를 SHA로 고정해 사용한다. 런타임과 무관함을 확인한 문서만 제외하고 소스·공통 UI·설정·정적 자산·lockfile·테스트·미분류 파일은 실행 대상으로 둔다. 파일 목록·영역 결과를 관련 integration 선택에도 재사용한다. 라벨은 도입하지 않는다.
+- **guard와 required**: 2단계에서 기본 checks와 PR guard를 fork main required로 연결한다. 판별·build·핵심 E2E 실패는 main 병합을 차단한다. 문서 전용·draft·main 외 PR의 E2E 생략은 이유를 보고한다. draft는 ready 전환 후 다시 검증한다. 판별 실패·파일 목록 누락은 성공으로 생략하지 않고 실패시킨다.
+- **선택 근거**: 개발 중에는 변경 관련 검증으로 비용을 줄이고, main 병합 전에 실패 비용이 큰 로그인·주문을 검증한다. 비핵심 브라우저 회귀는 배포 전 전체 E2E로 막고, 정기 측정으로 전체 흐름과 성능을 감시한다. 관련 integration은 실험 후 선택하는 후보가 아니라 기본 정책이다.
+- **안전 논리의 범위**: 핵심 회귀는 main 병합 전에, 전체 E2E가 검출하는 회귀는 Production 배포 전에 차단한다. 비핵심 회귀가 main에 들어갈 가능성까지 없앤다고 주장하지 않는다. main 유입 방지와 사용자 대상 배포 방지를 구분해 과제 문서에 설명한다.
+- **개정 이유**: 모든 코드 PR의 전체 E2E 정책을 사용자 지정 실행 시점 분리로 대체하고 changed-files·draft 생략을 추가했다. 정기 실행은 배포 전 게이트를 대신하지 않는다.
+- **merge queue 대체 확정 (2026-09-10)**: 현재 fork는 API상 개인(User) 소유 공개 저장소로 merge queue 지원 대상이 아니다. 개인 fork를 유지하고 main required checks를 strict로 설정한다. main이 바뀌면 PR에 최신 main을 반영하고 CI를 다시 통과해야 병합 가능하다. main 변경 자체로 모든 PR이 자동 재실행되는 것은 아니다. 전체 E2E의 실행 시점은 배포 전·정기로 유지한다. [GitHub strict checks](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches).
+- **merge_group 미적용 이유·제출 기록**: merge queue는 조직 소유 공개 저장소 또는 Enterprise Cloud 조직의 비공개 저장소에서 제공된다. 현재 개인 fork에서는 큐를 활성화할 수 없으므로 큐가 발생시키는 `merge_group` 검증도 사용할 수 없다. 이벤트 선언만으로 동작하지 않는다. CI 제출 문서에 저장소 소유 유형·공식 지원 범위·strict 대체 방식·main 갱신 후 재검증 증거를 함께 남긴다. [GitHub 지원 범위](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/merging-a-pull-request-with-a-merge-queue).
 
-## ADR-7. 통합 테스트 related-only 실험 (측정 후 판정)
+## ADR-7. 통합 테스트: 모든 PR에서 변경 관련 실행
 
-- **상태**: 합의 (2026-09-09) — 실험 예정
-- **실험**: 같은 커밋에서 전체 vitest 실행 vs `pnpm vitest related --run <변경 파일들>` 을 CI에서 각 3회, 중앙값 비교. 로컬 참고치: 전체 46파일 402개 = 7.4초(M칩, CI 러너에선 더 길 수 있음).
-- **판정 기준 (측정 전 고정)**: 절약분이 측정 흔들림(범위)과 장치 오버헤드(변경 파일 감지 step)를 빼고도 유의미하게 남으면 채택, 아니면 전체 실행 유지 + 실험 기록만 남김.
-- **채택 시 안전 논리 필수**: 모듈 그래프 밖 의존(MSW 핸들러·설정·테스트 셋업 변경) 시 전체 실행 폴백.
-- **과제 정합**: "무조건" 요구는 lint/type/unit까지, integration은 조건부 허용 대상.
+- **상태**: 합의 (2026-09-10 사용자 요청으로 채택 확정)
+- **분류**: 8주차 단위/통합 판단을 출발점으로 현재 테스트 책임을 확인해 두 집합을 나눈다. node/jsdom과 DOM 파일명은 실행 환경 구분이며 단위/통합 구분이 아니다. 현재 전체 테스트가 빠지지 않게 목록을 대조한다. unit은 항상 전체 실행한다.
+- **선택**: 기존 Vitest의 `related --run`을 integration 집합에 적용하고 수정한 integration 테스트 자체도 포함한다. 정적 의존 그래프로 변경 영향이 연결된 테스트를 선택하며 테스트 본문을 복제하지 않는다.
+- **전체 영향 처리**: 공통 setup·MSW 기반·빌드/테스트 설정·lockfile·안전하게 범위를 복원할 수 없는 삭제/이름 변경·미분류 런타임 경로는 전체 integration을 실행한다. 런타임 변경인데 관련 결과가 0개인 경우도 전체 폴백하고 테스트 공백 여부를 기록한다.
+- **생략과 실패 구분**: 앱·빌드·테스트 입력이 아닌 문서는 관련 integration 0개가 가능하다. 판별 성공과 이유를 보고한다. 변경 파일 조회 실패·누락·잘림이나 테스트 수집 실패를 0개 성공으로 취급하지 않는다.
+- **검증·측정**: 관련/무관 영역, 공통 기반, 테스트 자체 변경, 삭제·이름 변경의 선택 목록을 실제 실행과 대조한다. 같은 커밋·CI 조건에서 전체 실행과 unit 전체+관련 integration을 각 3회 측정하고 raw·중앙값·범위·판별 비용을 남긴다. 시간 이득이 작다는 이유로 일반 PR의 related 정책을 철회하지 않는다.
+- **전체 실행 시점**: 배포 전·정기·수동 전체 검증과 로컬 전체 테스트 명령은 모든 integration을 실행한다.
 
 ## ADR-8. flaky 정책: CI 한정 재시도 + 격리 상한 + trace 수집
 
 - **상태**: 합의 (2026-09-09)
 - **결정**: (1) `retries: process.env.CI ? 2 : 0` — 로컬 0(흔들림 즉시 노출), CI 2회. Playwright가 재시도 후 성공을 "flaky"로 별도 표기 → 재시도 자체가 흔들림/진짜 실패의 구분 장치. (2) flaky 발생이 로그 안 열고 보이게 리포트 노출. (3) 같은 스펙 2회 이상 flaky 기록 시 `test.fixme` 격리 + 이슈 기록 — 만성 흔들림 은폐 방지 상한. (4) CI 한정 `trace: retain-on-failure` — flaky 원인 사후 분석용 증거 수집.
+- **병합·배포 게이트와의 정합 (2026-09-10)**: 격리한 경로와 검증 공백·복구 계획을 명시한다. 핵심 테스트 또는 해당 변경의 검증을 격리한 경우 대체 검증 없이 병합·배포하지 않고, 격리된 흐름까지 검증 완료한 것으로 보고하지 않는다.
 - **검토 후 제외 (판단 흔적)**: 타임아웃 연장(진짜 실패 판명 지연), quarantine 별도 트랙(스펙 5개 규모에 과함), 개별 재시도(어떤 스펙이 흔들릴지 겪은 후 좁히는 게 순서), 재시도 0+수동 재실행(구분이 기록에 안 남음). 자동 대기 준수는 flaky 발생 시 1차 수리 방법으로 정책에 한 줄 명시.
 
-## ADR-9. Vercel 배포: fork 연결, Production 브랜치 = main (기본값)
+## ADR-9. Vercel Production 배포: 전체 E2E 성공 후 게시
 
-- **상태**: 합의 (2026-09-09)
-- **결정 (2026-09-09 개정)**: Vercel(heeji289@gmail.com 계정)을 fork에 연결. **Production 브랜치 = `main` 기본값 그대로** — 최초 통합 PR(feat/round-10→main) 이후 main이 작업 최신 상태이므로 브랜치 지정 우회 불필요. 실험 브랜치·fork 내부 PR은 Preview 자동 배포.
-- **효과**: 층 3 "배포 전" 시점 실물화, 회고 6절 배포·운영 근거, APP_ORIGIN 환경별 분리 실물, preview smoke test·릴리즈 추적성 차별화 요소 해금, 질문 3 답변의 실물 증거.
-- **일관성**: 보호(branch protection)·배포(Production)·실험 PR base·정기 schedule·main push 전체 E2E가 모두 fork `main`으로 통일 — "어떤 코드가 어떤 검증을 통과해 어떤 환경에 나갔는가" 서사가 실무 표준 모델 그대로 이어짐.
+- **상태**: 합의한 배포 전 검증 정책의 기본 구현안 (2026-09-10 개정, 실제 설정 변경 전)
+- **현재 상태**: fork 연결과 main Production 브랜치 설정은 1단계에서 준비했다. Git main push 자동 배포는 Actions 결과를 기다리지 않으므로 배포 전 E2E 게이트가 아니다.
+- **변경안**: main의 자동 Git Production 배포를 중지하고, 소유 fork main의 CI 파이프라인이 기본 검사·전체 integration·build·전체 E2E 성공 후 공식 Vercel CLI로 같은 SHA를 Production에 배포한다. PR의 개발용 Preview 자동 배포는 유지할 수 있다. [Vercel Git 설정](https://vercel.com/docs/project-configuration/git-configuration), [Actions 연동](https://vercel.com/kb/guide/how-can-i-use-github-actions-with-vercel).
+- **대상 고정**: 검증 SHA·run URL·배포 SHA와 결과를 연결한다. 배포 단계에서 바뀐 main을 다시 가져오지 않는다. 오래된 검증 run이 최신 Production을 덮지 않도록 게시 순서를 보호한다. 빌드 환경·산출물 호환은 구현 시 확인한다.
+- **실행 경계**: E2E는 CI의 격리된 서버에서 실행한다. PR·upstream 제출·정기·검증용 수동 실행에는 Production 배포 자격 증명을 공급하지 않는다. 인증·프로젝트 설정은 secrets/환경 설정으로 제공한다.
+- **2단계 완료 증거**: 비핵심 E2E 실패 시 배포가 시작되지 않고 기존 Production이 유지되는지 확인한다. 정상 실행은 전체 E2E 성공 뒤 같은 SHA가 배포되는지 확인한다. 실제 배포 연결이 없으면 배포 전 게이트 완료로 표시하지 않는다.
+- **의미**: main에 합쳐진 코드와 사용자에게 배포할 코드를 구분한다. 전체 E2E는 사후 검출이 아니라 Production 배포 차단 조건이다.
 
 ## ADR-10. 예산 게이트 구성: size-limit + zod env 스크립트 + Lighthouse 임계값은 7주차 LCP 근거
 
@@ -72,13 +82,13 @@
 - **결정**:
   - **size-limit 채택** (새 devDependency, 사용자 승인). 대상 확정: **홈·상품목록·상품상세 First Load JS + 공유 청크(shared by all) + hero 이미지 소스 파일** — 공유 청크는 전역 회귀(공통 모듈에 무거운 import) 검출용으로 빨간불 실험과 짝. 페이지 전수·총량 예산은 소음이라 제외. 임계값은 이번 주 실측 후 `현재값 + 측정 범위 + 여유폭 N%` 공식으로 본인이 결정 — 7주차 인용의 실체는 "전송 크기가 LCP를 지배한다는 발견의 회귀 방지".
   - **env 검증은 zod 기반 스크립트** (devDependency, 사용자 제안). 검증: APP_ORIGIN URL 형식, 비밀값(AUTH_SESSION_SECRET 등)에 `NEXT_PUBLIC_` 접두 검출, 환경별 필수값. **클라이언트 번들 밖(빌드 전 스크립트)에만 배치** — 앱 코드에 import하면 자기 번들 예산과 충돌. 변수 2개엔 과하다는 정직한 한 줄 + 스키마 선언성 학습 목적 병기.
-  - **LCP·FCP·TTFB는 Lighthouse CI가 측정** (층 4 정기 + 수동). assertion 임계값 근거 = **7주차 실측 LCP 값** (docs/week-07-performance rf-after) — "7주차 값 인용" 요구의 본류. 변동성 대응은 numberOfRuns 3 중앙값.
-- **주의**: 층 3(main push 전체 E2E)은 게이트가 아니라 사후 검출 — Vercel Production 배포와 병렬로 돌므로 깨진 코드가 잠시 Production에 노출될 수 있음을 안전 논리에 명시(검출 → revert/fix-forward).
+  - **LCP·FCP·TTFB는 Lighthouse CI가 측정** (정기 + 수동). 2단계에서 홈·상품 목록의 기본 측정·리포트를 연결하고 3단계에서 assertion을 적용한다. assertion 임계값 근거 = **7주차 실측 LCP 값** (docs/week-07-performance rf-after) — "7주차 값 인용" 요구의 본류. 변동성 대응은 numberOfRuns 3 중앙값.
+- **배포와의 연결 (2026-09-10 개정)**: ADR-9의 배포 전 전체 E2E를 유지하고 3단계 예산·env 검증도 필수 성공 조건에 추가한다. Lighthouse의 변동성 있는 측정은 PR required·Production 배포 차단 조건으로 사용하지 않는다.
 
 ## ADR-11. AI 리뷰: 두 모드 구도, CI 통합(advisory, PR 코멘트)
 
 - **상태**: 합의 (2026-09-09)
-- **트리거 (확정)**: (c) 코드 변경 PR만 자동 — 층 2의 paths 필터(코드·설정·lockfile) 재사용, 문서만 PR은 E2E와 함께 AI 리뷰도 스킵. 스킵 논리 일관("문서 PR엔 컨벤션 리뷰 대상 없음") + 장치 추가 비용 0. 프롬프트 개선 전/후 비교는 같은 diff에 job re-run으로 수행.
+- **트리거 (확정)**: 코드 변경 PR만 자동 — 기존 PR 변경 파일 판별을 재사용하되 AI 리뷰의 코드·설정·lockfile 조건은 E2E의 main base 조건과 분리한다. 문서만 PR은 AI 리뷰와 E2E를 생략한다. E2E에는 main base·non-draft 조건도 필요하다. 프롬프트 개선 전/후 비교는 같은 diff에 job re-run으로 수행.
 - **결정**:
   - **모드 1 (기존 유지)**: 무유도 Codex 리뷰 — 선입견 없는 버그 사냥, 구현 단계마다 로컬.
   - **모드 2 (신설)**: 컨벤션 명문화 프롬프트 리뷰를 **CI(GitHub Actions)에 통합**. 기준 = CONVENTIONS.md + 6주차 FSD 경계 + 5주차 URL·서버상태 규칙 + 1주차 any/as 금지. "잘 잡은 1/헛소리 1" 수집과 프롬프트 개선은 모드 2에서.
@@ -93,12 +103,18 @@
   - **CI 세부**: max_turns 소수(≈5)·timeout-minutes 10·concurrency 취소 (구현 시 조정 가능).
   - **4→5 연결**: 규칙별 지적 빈도 집계 → 최다 반복 ∩ 결정적 판별 가능 ∩ 후보 풀 → 1개 승격 → 프롬프트에서 해당 규칙 제거.
 
-## ADR-12. required 선정: 5개 전부 (core E2E 포함), 제외 3종 근거 확정
+## ADR-12. required 선정: main 핵심 E2E와 Production 전체 E2E 분리
 
-- **상태**: 합의 (2026-09-09)
-- **결정 (2026-09-09 개정)**: fork **`main`** branch protection의 required = **lint·type·unit / production build / size-limit / env 검증 / core E2E(guard 구조 전제)**. "main 머지 PR만 블로커, 평소 PR(작업 브랜치 간)은 무관"은 branch protection이 base 브랜치별 설정이라 구조적으로 자동 충족.
-- **required 제외 + 근거**: AI 리뷰(비결정적 — 거짓 빨간불이 머지를 막음), 전체 E2E(main push 사후 검출이라 PR 체크가 아님), Lighthouse(측정 변동성 + 주 1회 배치).
-- **core E2E를 넣은 근거**: 실패 비용 큰 흐름(로그인·주문)만 게이트 + retry 2회·guard job으로 flaky 잠금 리스크 완화 — 층 2 설계 논리와 일관.
+- **상태**: 합의 (2026-09-10 사용자 실행 정책 반영)
+- **2단계 main branch protection**: 기본 checks(lint·type·unit 전체·관련 integration)와 PR guard(변경 판별·production build·main 대상 핵심 E2E)를 required로 연결한다. 문서 전용·draft에서는 판별·build 성공 후 guard가 의도적 E2E 생략을 보고한다. ready 전환 시 재판정한다. 전체 E2E를 PR required로 요구하지 않는다.
+- **최신 main 반영 강제**: `Require branches to be up to date before merging`을 활성화한다. 다른 PR 병합으로 main이 바뀌면 기존 PR은 병합할 수 없으며, Update branch 또는 merge/rebase로 갱신한 뒤 `pull_request.synchronize`의 CI를 통과해야 한다. 과거 커밋의 run 재실행만으로는 이 조건을 충족하지 않는다. 별도 브랜치 자동 갱신 봇은 만들지 않는다.
+- **2단계 완료 증거**: 같은 main 대상으로 E2E가 실행되는 non-draft 코드 PR과 생략되는 문서 PR을 각각 확인한다. draft→ready에서 기본 검증 유지·핵심 E2E 재실행도 확인한다. main의 non-draft 런타임 변경 PR은 핵심 E2E 성공 후 머지 가능하며 핵심 E2E·관련 integration·판별 실패 시 차단되는지 최신 SHA·required 설정·PR 상태로 확인한다. base 재지정 시 이전 생략 결과로 main에 병합할 수 없는지도 검증한다. 관리자 우회는 통과 증거가 아니다.
+- **strict 검증 증거**: A·B PR이 통과한 상태에서 A를 먼저 병합한다. B가 최신 main 미반영으로 차단되는지, B를 갱신하면 새 SHA의 CI가 실행되고 성공 후 병합 가능해지는지 확인한다. 갱신 전후 base/head SHA·run URL·PR 상태를 남긴다. 선택된 PR 검증을 재실행하는 것이며 전체 E2E를 병합 전에 추가하는 실험은 아니다.
+- **Production gate**: main에 병합된 대상 SHA의 기본 검사·전체 integration·build·전체 E2E가 성공해야 배포한다. 비핵심 E2E 실패가 Production을 막는 실제 증거는 2단계에 포함한다(ADR-9).
+- **3단계 확장**: size-limit·env 검증을 main required와 배포 조건에 추가한다. PR 검증 책임은 기본 검사·관련 integration / production build / size-limit / env / 핵심 E2E다. 책임 수에 맞춰 물리 job을 쪼개지는 않는다.
+- **PR required 제외**: 전체 E2E(배포 전 게이트), Lighthouse(정기·수동 측정), AI 리뷰(비결정적 advisory). 정기 검증의 실패를 PR에 강제로 연결하지 않는다.
+- **근거**: 개발·병합·배포 단계마다 사용자가 정한 검증 강도를 적용한다. 관련 검증과 핵심 기능의 실패는 병합을, 전체 브라우저 흐름의 실패는 Production 배포를 차단한다.
+- **guard 조건 재계산의 전환 메모 (2026-09-10)**: 현재 guard는 핵심 E2E 실행 조건(main 대상 AND non-draft AND 런타임 변경)을 build-e2e의 실행 단계와 **같은 입력으로 한 번 더 계산**해 실제 결과와 대조한다. 이 재계산이 막는 것은 "두 조건 중 한쪽만 잘못 바뀌는 경우"뿐이고, 분류 오류나 잘못된 정책이 양쪽에 같이 반영되는 경우는 못 잡는다 — 독립 검증이 아니라 작은 안전장치다. 3단계에서 guard를 확장(env·예산 판정 추가)할 때 다음으로 전환한다: ① 실행 조건을 테스트 가능한 스크립트(예: `decide-e2e-scope.mjs`)로 추출해 workflow가 호출하고, ② main×draft×runtime 8조합의 기대값을 **손으로 적은 진리표**로 고정한 정책 테스트를 unit 집합에 둬 모든 PR에서 돌게 하며(기대값을 같은 조건문으로 재계산하면 중복이 테스트로 자리만 옮기므로 금지, 테스트 대상은 CI가 실제 호출하는 그 스크립트여야 한다), ③ 그 후에 guard의 조건 재계산을 제거한다. guard에는 job 결과 확인, 출력이 정확히 true/false인지 검증(빈 문자열 불허), 선언된 결정 대비 실제 outcome 대조가 계속 남는다. **정책 테스트 없이 재계산만 지우지 않는다.** 전환 전까지 현재 중복은 유지한다.
 
 ## 5단계 승격 후보 풀 (1~10주차 과제 문서 스캔 반영, 최종 선택은 모드 2 AI 리뷰 결과와 대조 후)
 
@@ -120,8 +136,8 @@
 
 0. **준비**: fork Actions 활성화 → feat/round-10 origin push → **통합 PR(feat/round-10→fork main) 머지** → Vercel 연동(Production=main) → fork secrets(Claude 토큰) → Docker 환경 확인
 1. **1단계 측정**: Before cold/warm 각 3회(gh cache delete + re-run) → 병목 지목 → 전략 적용(quality.yml 보강·ci.yml 삭제 포함) → After 재측정 → 캐시 hit/miss 실험(lockfile 원복) → `docs/rfc/week10-ci.md` 기록
-2. **2단계 조건부**: paths filter + guard job + `@critical` 태그 + retries/trace + main push 전체 E2E + 주 1회 schedule → 걸리는/안 걸리는 PR 실험 → 통합 테스트 related 실험(ADR-7 판정 기준)
-3. **3단계 예산**: size-limit 기준선 실측 → 임계값 결정 → validate-env(zod) → branch protection required 5종 → 빨간불 PR 실험 → step summary 가시성 + 릴리즈 추적성(SHA·run URL·배포 URL)
+2. **2단계 조건부**: dorny/paths-filter·unit/integration 분류·관련 integration 선택 → main·non-draft·런타임 변경 핵심 E2E·guard·strict required 연결 → 실행/생략·draft 전환·base 재지정·병합 차단·main 갱신 후 재검증 PR 실험 → main 자동 Production 배포를 전체 E2E 성공 후 CI 게시로 전환·배포 차단 검증 → 주간·수동 전체 E2E와 Lighthouse 기본 측정 → related 실행 비용 기록
+3. **3단계 예산**: size-limit 기준선 실측 → 임계값 결정 → validate-env(zod) → required·배포 조건에 예산·env 추가 → 예산 초과 빨간불 PR 실험 → Lighthouse assertion 임계값 → 리포트·릴리즈 추적성 보강
 4. **4단계 AI 리뷰**: 모드 2 프롬프트 조립(component-review·architecture-review SKILL + CONVENTIONS) → CI 통합(안전장치·paths 조건) → 잘 잡은 1/헛소리 1 수집 → 프롬프트 개선 전후 재실행 비교 → 완성 workflow에 5관점 AI 리뷰
 5. **5단계 승격**: AI 리뷰 결과와 후보 풀(①②④⑤) 대조 → 1개 선택 → 위반/정상 양방향 검증 → 승격 항목을 AI 프롬프트에서 제거 → 책임 모델 문단
 6. **심화**: Docker 이미지 빌드·실행 smoke / rollback 답변
