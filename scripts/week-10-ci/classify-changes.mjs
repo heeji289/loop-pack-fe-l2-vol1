@@ -26,7 +26,13 @@ const parseFileList = (name) => {
 };
 
 const allFiles = parseFileList('ALL_FILES');
-const docsFiles = parseFileList('DOCS_FILES');
+const docsFiles = process.argv.includes('--local-diff')
+  ? allFiles.filter((file) =>
+      /^(?:(?:docs|specs)\/.*\.md|README\.md|AGENTS\.md|CLAUDE\.md|CONVENTIONS\.md|LICENSE)$/.test(
+        file,
+      ),
+    )
+  : parseFileList('DOCS_FILES');
 
 if (allFiles.length === 0) {
   fail('변경 파일 목록이 0개다 — PR diff 조회가 누락됐다.');

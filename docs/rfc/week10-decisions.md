@@ -85,23 +85,14 @@
   - **LCP·FCP·TTFB는 Lighthouse CI가 측정** (정기 + 수동). 2단계에서 홈·상품 목록의 기본 측정·리포트를 연결하고 3단계에서 assertion을 적용한다. assertion 임계값 근거 = **7주차 실측 LCP 값** (docs/week-07-performance rf-after) — "7주차 값 인용" 요구의 본류. 변동성 대응은 numberOfRuns 3 중앙값.
 - **배포와의 연결 (2026-09-11 개정)**: ADR-9의 배포 전 전체 E2E를 유지하고 3단계 예산·env 검증도 필수 성공 조건에 추가한다. env는 모든 PR의 실제 서버 실행 검사와 Production 후보의 동적 API 검증으로 보완한다. `--prod --skip-domain` 후보가 통과하고 main SHA가 여전히 같을 때 동일 배포만 promote한다. Lighthouse의 변동성 있는 측정은 PR required·Production 배포 차단 조건으로 사용하지 않는다.
 
-## ADR-11. AI 리뷰: 두 모드 구도, CI 통합(advisory, PR 코멘트)
+## ADR-11. PR 자동 리뷰는 별도 workflow의 advisory로 둔다
 
-- **상태**: 합의 (2026-09-09)
-- **트리거 (확정)**: 코드 변경 PR만 자동 — 기존 PR 변경 파일 판별을 재사용하되 AI 리뷰의 코드·설정·lockfile 조건은 E2E의 main base 조건과 분리한다. 문서만 PR은 AI 리뷰와 E2E를 생략한다. E2E에는 main base·non-draft 조건도 필요하다. 프롬프트 개선 전/후 비교는 같은 diff에 job re-run으로 수행.
-- **결정**:
-  - **모드 1 (기존 유지)**: 무유도 Codex 리뷰 — 선입견 없는 버그 사냥, 구현 단계마다 로컬.
-  - **모드 2 (신설)**: 컨벤션 명문화 프롬프트 리뷰를 **CI(GitHub Actions)에 통합**. 기준 = CONVENTIONS.md + 6주차 FSD 경계 + 5주차 URL·서버상태 규칙 + 1주차 any/as 금지. "잘 잡은 1/헛소리 1" 수집과 프롬프트 개선은 모드 2에서.
-  - **배치 = advisory**: required 미지정, 결과는 PR 코멘트로만. 근거: 비결정적 검증을 게이트로 두면 거짓 빨간불이 머지를 막음(flaky 논리와 동일 계열, 과제 기본 권장과 일치).
-- **안전장치 (workflow에 실물로)**: 해당 job에만 `pull-requests: write`, `max_turns`·`timeout-minutes` 제한, concurrency 중복 취소, `pull_request_target` 미사용(fork 내부 same-repo PR이라 `pull_request`로 secrets 접근 가능), 리뷰 실패가 체크를 더럽히지 않게 continue-on-error 검토.
-- **인증**: 결제 강제 없는 경로 — Claude 구독의 `claude setup-token` OAuth 토큰(또는 보유한 키)을 fork secrets에. 로그에 노출 금지.
-- **상세 설계 (2026-09-09 합의)**:
-  - **프롬프트**: 번호 붙은 규칙 목록(C1 any/as/disable 침묵 금지 · C2 파생값 useEffect 동기화 금지 · C3 컴포넌트 API 직접 호출 금지 · C4 서버 응답 store 복사 금지 · C5 URL 상태 nuqs · C6 FSD 경계·Public API · C7 queryOptions 계약 · C8 핸들러 on*/handle* · C9 selector 구독) — component-review·architecture-review SKILL + CONVENTIONS에서 조립. 출력 형식 강제: `[규칙번호] 파일:줄 — 근거 — 확신도`, 목록 외 지적은 "기준 외 관찰"로 분리, 확신 낮으면 질문으로.
-  - **판별**: 잘 잡은/헛소리 구분은 **본인이 직접 판정** (기준표 기계화 안 함 — 판별력이 과제의 핵심). 출력 형식은 판정 보조 재료.
-  - **개선 루프**: 같은 diff에 v1 → 판정 기록 → 프롬프트 수정 → v2 재실행 → 오탐 수 전/후 표.
-  - **리뷰 대상**: 이번 주 실제 구간 PR (통합 PR 제외, 부족 시 round-9 diff 재활용).
-  - **CI 세부**: max_turns 소수(≈5)·timeout-minutes 10·concurrency 취소 (구현 시 조정 가능).
-  - **4→5 연결**: 규칙별 지적 빈도 집계 → 최다 반복 ∩ 결정적 판별 가능 ∩ 후보 풀 → 1개 승격 → 프롬프트에서 해당 규칙 제거.
+- **결정 (2026-09-11)**: 기존 무유도 로컬 Codex 리뷰는 유지한다. PR 자동 리뷰는 [AI PR Review](../../.github/workflows/ai-review.yml)에서 `gpt-5.6-luna`를 Responses API로 호출한다. 사용자가 구독과 별도 API 과금을 선택했다.
+- **트리거·신뢰 경계**: Quality 완료 후 성공 여부와 무관하게 실행한다. default branch의 실행 코드와 고정한 PR base의 기준을 사용한다. PR head는 Git 객체로만 읽고 코드·설치 스크립트를 실행하지 않는다. 외부 fork·draft·오래된 SHA는 생략 사유를 남긴다.
+- **범위**: 기존 변경 판별을 재사용한다. 코드·설정·설계 문서·규칙 변경은 리뷰하고 일반 안내 문서는 사람 검토로 넘긴다. 기준의 정본은 복사하지 않고 base에서 읽는다.
+- **한도**: 모델 호출 1회·출력 6,000토큰·3분·입력 1MiB, 자동 재시도 없음. 같은 base/head는 댓글 예약으로 중복을 막고 AI workflow의 수동 재실행 1회만 허용한다. 작은 저장소의 소스·테스트를 함께 제공하며 상한 초과는 잘라서 성공시키지 않는다. 이 한도는 금액 상한이 아니다. API 사용량·프로젝트 한도는 작성자가 확인한다.
+- **결과**: SHA·기준/프롬프트 해시·읽은 기준·실행 링크와 함께 PR 댓글에 남긴다. 인증·수집·입력·응답·시간·게시 실패는 지적 없음과 구별한다. 비결정적 결과이므로 required·guard·배포 조건에 넣지 않고 수용·반려는 작성자가 결정한다.
+- **활성화**: API 프로젝트 키를 저장소 secret `OPENAI_API_KEY`에 등록하고 workflow를 default branch에 반영한다. 저장소 secret 등록은 확인했다. default branch 반영과 실제 Actions 실행 검증은 남아 있다.
 
 ## ADR-12. required 선정: main 핵심 E2E와 Production 전체 E2E 분리
 
