@@ -327,3 +327,5 @@ describe('상품 정보', () => {
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
 });
+
+// CI 관련 선택 실증용 임시 주석 — 실험 종료 시 브랜치 폐기
