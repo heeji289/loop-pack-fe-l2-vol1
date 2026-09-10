@@ -214,6 +214,7 @@ function CartItemRow({
   const { toggleChecked, setQuantity, removeItems } = useCartActions();
   const { productId, quantity, checked } = item;
   const productLabel = product?.name ?? productId;
+  const [quantityInput, setQuantityInput] = useState<string | null>(null);
 
   return (
     <li className={styles.row}>
@@ -272,9 +273,28 @@ function CartItemRow({
         >
           -
         </button>
-        <output className={styles.quantity} aria-label={`${productLabel} 수량`}>
-          {quantity}
-        </output>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={Number.MAX_SAFE_INTEGER}
+          step={1}
+          required
+          className={styles.quantity}
+          aria-label={`${productLabel} 수량`}
+          title="1 이상의 정수를 입력하세요. 잘못된 입력은 마지막 수량으로 복원됩니다."
+          value={quantityInput ?? quantity}
+          onChange={(event) => {
+            setQuantityInput(event.currentTarget.value);
+            setQuantity(productId, event.currentTarget.valueAsNumber);
+          }}
+          onBlur={() => {
+            setQuantityInput(null);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.currentTarget.blur();
+          }}
+        />
         <button
           type="button"
           className={styles.stepperButton}

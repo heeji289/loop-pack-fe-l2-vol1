@@ -3,7 +3,11 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { CartPage } from '@/_pages/cart';
-import { useCartStore, type CartItem } from '@/entities/cart/model/cart-store';
+import {
+  CART_STORAGE_KEY,
+  useCartStore,
+  type CartItem,
+} from '@/entities/cart/model/cart-store';
 import {
   CHECKOUT_STORAGE_KEY,
   useCheckoutStore,
@@ -115,8 +119,8 @@ describe('비로그인 구매', () => {
     );
 
     expect(
-      screen.getByRole('status', { name: `${product.name} 수량` }),
-    ).toHaveTextContent('3');
+      screen.getByRole('spinbutton', { name: `${product.name} 수량` }),
+    ).toHaveValue(3);
     // 다시 구매하기를 누르기 전까지 draft는 확정 당시의 수량 2를 유지한다
     expect(draftItems()).toEqual([{ productId: product.id, quantity: 2 }]);
   });
@@ -169,8 +173,8 @@ describe('장바구니 목록', () => {
     );
 
     expect(
-      screen.getByRole('status', { name: `${product.name} 수량` }),
-    ).toHaveTextContent('2');
+      screen.getByRole('spinbutton', { name: `${product.name} 수량` }),
+    ).toHaveValue(2);
 
     const decrease = screen.getByRole('button', {
       name: `${product.name} 수량 줄이기`,
@@ -179,8 +183,8 @@ describe('장바구니 목록', () => {
     await user.click(decrease);
 
     expect(
-      screen.getByRole('status', { name: `${product.name} 수량` }),
-    ).toHaveTextContent('1');
+      screen.getByRole('spinbutton', { name: `${product.name} 수량` }),
+    ).toHaveValue(1);
     expect(decrease).toBeDisabled();
   });
 
@@ -360,5 +364,97 @@ describe('전체 선택', () => {
       screen.getByRole('checkbox', { name: secondProduct.name }),
     ).not.toBeChecked();
     expect(screen.getByRole('button', { name: '구매하기' })).toBeDisabled();
+  });
+});
+
+describe('수량 직접 입력', () => {
+  it('지우고 12를 입력하면 즉시 합계·저장에 반영되고 바로 구매한 draft도 12다', async () => {
+    const product = productAt(0);
+
+    seedCartItems({ productId: product.id, quantity: 1, checked: true });
+    const { user } = renderCartPage(SESSION_USER);
+    const input = await screen.findByRole('spinbutton', {
+      name: `${product.name} 수량`,
+    });
+
+    await user.clear(input);
+    expect(input).toHaveValue(null);
+    await user.type(input, '12');
+
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue(12);
+    const summary = screen.getByRole('complementary', {
+      name: '주문 예상 금액',
+    });
+    expect(
+      within(summary).getAllByText(
+        `${(product.price * 12).toLocaleString()}원`,
+      ),
+    ).toHaveLength(2);
+    expect(
+      JSON.parse(localStorage.getItem(CART_STORAGE_KEY) ?? 'null'),
+    ).toMatchObject({
+      state: {
+        items: [{ productId: product.id, quantity: 12, checked: true }],
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: /구매하기/ }));
+
+    expect(draftItems()).toEqual([{ productId: product.id, quantity: 12 }]);
+    expect(router.push).toHaveBeenCalledWith('/orders/new');
+
+    await user.click(
+      screen.getByRole('button', { name: `${product.name} 수량 늘리기` }),
+    );
+    expect(input).toHaveValue(13);
+    await user.click(
+      screen.getByRole('button', { name: `${product.name} 수량 줄이기` }),
+    );
+    expect(input).toHaveValue(12);
+  });
+
+  it.each(['', '0', '-3', '1.5', '9007199254740992'])(
+    '유효하지 않은 입력 "%s"는 저장하지 않고 포커스를 옮기면 마지막 수량으로 복원한다',
+    async (invalidInput) => {
+      const product = productAt(0);
+
+      seedCartItems({ productId: product.id, quantity: 3, checked: true });
+      const { user } = renderCartPage();
+      const input = await screen.findByRole('spinbutton', {
+        name: `${product.name} 수량`,
+      });
+
+      await user.clear(input);
+      await user.paste(invalidInput);
+
+      expect(
+        JSON.parse(localStorage.getItem(CART_STORAGE_KEY) ?? 'null'),
+      ).toMatchObject({
+        state: {
+          items: [{ productId: product.id, quantity: 3, checked: true }],
+        },
+      });
+      await user.tab();
+      expect(input).toHaveValue(3);
+    },
+  );
+
+  it('빈칸에서 Enter를 누르면 직전에 직접 입력한 유효 수량으로 복원한다', async () => {
+    const product = productAt(0);
+
+    seedCart(product.id);
+    const { user } = renderCartPage();
+    const input = await screen.findByRole('spinbutton', {
+      name: `${product.name} 수량`,
+    });
+
+    await user.clear(input);
+    await user.paste('12');
+    await user.clear(input);
+    await user.keyboard('{Enter}');
+
+    expect(input).toHaveValue(12);
+    expect(input).not.toHaveFocus();
   });
 });
