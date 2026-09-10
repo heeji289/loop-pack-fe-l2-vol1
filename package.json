@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/week-10-ci/validate-env.mjs && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -41,6 +41,7 @@
     "nuqs": "^2.9.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "zod": "^4.6.1",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
@@ -78,7 +79,6 @@
     "tailwindcss": "^4.3.2",
     "typescript": "^5",
     "typescript-eslint": "^8.63.0",
-    "vitest": "^4.1.10",
-    "zod": "^4.6.1"
+    "vitest": "^4.1.10"
   }
 }
