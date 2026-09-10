@@ -3,5 +3,6 @@
     "deploymentEnabled": {
       "main": false
     }
-  }
+  },
+  "buildCommand": "pnpm build && if [ \"$VERCEL_ENV\" = production ]; then pnpm check:budget; fi"
 }
