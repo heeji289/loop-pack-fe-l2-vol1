@@ -148,14 +148,10 @@ export function ProductList() {
             ))}
           </div>
           {/* 이전 목록을 보여주는 동안엔 URL이 아니라 응답의 page를 써 상품과 번호를 함께 바꾼다. */}
-          {/*
-           * 조회 중이거나 이전 목록을 보여주는 동안에는 화면의 페이지 번호가 아직 확정이 아니다.
-           * 갱신 실패로 조회가 끝난 뒤에도 이전 목록이 남아 있으므로 두 조건을 함께 본다.
-           */}
           <ProductListPagination
             page={visibleData.page}
             totalPages={totalPages ?? 1}
-            isUpdating={isFetching || isShowingPreviousData}
+            isUpdating={isShowingPreviousData}
             onPageChange={changePage}
           />
         </>
