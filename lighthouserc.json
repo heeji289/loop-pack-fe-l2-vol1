@@ -4,7 +4,8 @@
       "url": ["http://localhost:3000/", "http://localhost:3000/products"],
       "numberOfRuns": 3,
       "startServerCommand": "pnpm start",
-      "startServerReadyPattern": "Ready"
+      "startServerReadyPattern": "Ready",
+      "settings": { "preset": "desktop" }
     },
     "upload": {
       "target": "filesystem",
