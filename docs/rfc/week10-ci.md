@@ -527,7 +527,7 @@ summary에 후보의 동적 인증 API HTTP 401·본문 확인 PASS와 Productio
 
 `pnpm build` = `next build`로 되돌렸고, Next 설정 로딩의 빌드용 env 검증은 그대로다. 서버용 env는 `instrumentation.register()`가 맡는다.
 
-**Preview를 일부러 제외했다.** Preview가 초과로 실패해도 얻는 게 없다 — 병합은 이미 CI 예산 검사가 막고 있고, 잃는 것은 리뷰어가 볼 화면이다. 반대로 Production은 게시 직전이라 막을 실익이 있다. 조건문 의미(production만 실행, build 실패 시 미실행)는 같은 셸 표현식을 로컬에서 `VERCEL_ENV` 세 경우로 실행해 확인했다.
+**Preview를 일부러 제외했다.** Preview가 초과로 실패해도 얻는 게 없다 — 병합은 이미 CI 예산 검사가 막고 있고, 잃는 것은 리뷰어가 볼 화면이다. 반대로 Production은 게시 직전이라 막을 실익이 있다. 조건문 의미(production만 실행, build 실패 시 미실행)는 같은 셸 표현식을 로컬에서 `VERCEL_ENV` 세 경우로 실행해 확인했고, 실제 초과 상태에서도 확인했다(아래 「Preview 제외 실증」).
 
 **배포 경로 실증 완료 (2026-09-11)**: [PR #28](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/28) 병합 커밋 `8ac18380`의 [run 34513756401](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34513756401) deploy job 로그에서 Vercel 원격 빌드가 `vercel.json`의 명령을 그대로 실행하는 것을 확인했다.
 
@@ -537,7 +537,16 @@ Running "pnpm build && if [ "$VERCEL_ENV" = production ]; then pnpm check:budget
 ## 번들 예산: PASS
 ```
 
-Production 후보 검증 후 같은 배포를 승격했다(`dpl_3sbQkLzH4pvofexvGwjugbxF8jve`). 이로써 "게시할 산출물에도 예산을 적용한다"가 설정 근거가 아니라 실행 근거가 됐다. Preview 제외는 아직 초과 상태를 만들어 확인하지 않았다 — 조건문의 의미만 로컬에서 확인한 상태다.
+Production 후보 검증 후 같은 배포를 승격했다(`dpl_3sbQkLzH4pvofexvGwjugbxF8jve`). 이로써 "게시할 산출물에도 예산을 적용한다"가 설정 근거가 아니라 실행 근거가 됐다.
+
+**Preview 제외 실증 (2026-09-11)**: 아래 빨간불 실험의 초과 커밋 `57697d5e`(홈 +35.4% 초과)에서 **Vercel Preview 배포는 success였다.** 같은 SHA의 CI는 `Bundle budget`에서 실패했으니, Preview 빌드에서는 `check:budget`이 실행되지 않았다는 뜻이다 — 실행됐다면 exit 1로 빌드가 깨졌을 것이다. `VERCEL_ENV` 분기가 실제 초과 상태에서 의도대로 동작했고, 예산을 넘긴 PR에서도 리뷰어가 볼 화면이 남는다는 설계 의도가 성립했다.
+
+| 커밋 | CI 예산 | Vercel Preview |
+|---|---|---|
+| `57697d5e` (초과) | ❌ `Bundle budget` 실패 | ✅ success ([배포](https://vercel.com/heeji289-6430s-projects/loop-pack-fe-l2-vol1/9i78YGLSzvWcyqePg5ZmdTW6WjoZ)) |
+| `af6d63ad` (복구) | ✅ PASS | ✅ success |
+
+이 실증은 빨간불 실험의 부산물이다 — Preview를 깨뜨리려고 따로 만든 상황이 아니라, 초과 PR을 만들었더니 Preview가 살아남은 것을 확인한 것이다.
 
 ### 세 환경의 측정값 일치 (2026-09-11)
 
