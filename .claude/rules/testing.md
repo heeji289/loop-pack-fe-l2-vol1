@@ -48,4 +48,5 @@ CLI 검사 스크립트의 공개 동작은 **종료 코드와 진단 출력**�
 - 환경은 파일 이름이 정한다: `*.dom.test.*` = jsdom · 그 외 `*.test.*` = node · `e2e/**/*.spec.{ts,tsx}` = Playwright(실제 브라우저).
 - 비동기 전이마다 대표 조건 하나만 기다린다 — 등장은 `findBy`, 제거는 `waitForElementToBeRemoved`, 비-DOM 조건은 `waitFor`. 같은 전이의 나머지는 `getBy`로 동기 검증한다.
 - 네트워크 차단은 `vitest.msw.setup.ts`가, 스토어 · localStorage 리셋은 jsdom에만 `vitest.setup.ts`가 이미 한다. 프로세스를 직접 띄우는 `integration-cli`(검사기) 프로젝트에는 setup이 없다 — 그 테스트는 spawn한 명령의 환경을 스스로 준다.
-- 린트가 실제로 거는 범위는 `eslint.config.mjs`의 테스트 블록이 정본이다. 오늘 기준으로 비활성화 · 단언 없음 · truthiness 단언은 `{src,tests}/**/*.test.{ts,tsx}`에서 에러가 되고, `src/app/api/**`는 truthiness 조항만 꺼져 있다. **`scripts/**`와 `e2e/**`에는 어느 조항도 걸리지 않는다** — 문장 규칙이라 사람과 리뷰가 확인한다.
+- 린트가 실제로 거는 범위는 `eslint.config.mjs`가 정본이다. 오늘 기준으로 비활성화 · 단언 없음 · truthiness 단언은 `{src,tests}/**/*.test.{ts,tsx}`에서 에러가 되고, `src/app/api/**`는 truthiness 조항만 꺼져 있다. 그 셋은 **`scripts/**`와 `e2e/**`에 걸리지 않는다** — 문장 규칙이라 사람과 리뷰가 확인한다.
+- **날짜를 로케일 문자열로 직접 만들지 않는다.** `toLocaleDateString` · `toLocaleTimeString` · `new Date(...).toLocaleString`은 `{src,tests,e2e,scripts}`의 `.ts` · `.tsx`에서 린트 에러다 — `scripts/**`의 `.mjs` 검사기는 린트 대상 자체가 아니라 걸리지 않는다. 표시 타임존을 안 주면 결과가 실행 환경을 따라가, 테스트가 구현과 같은 식으로 기대값을 만들면 로컬(KST)과 CI(UTC)가 서로 다른 값을 단언하며 양쪽 다 통과한다. 표시 타임존을 고정한 `shared/format-datetime`을 쓰고, 테스트 기대값은 리터럴로 적는다. 금액 표시(`Number.toLocaleString`)는 대상이 아니다.

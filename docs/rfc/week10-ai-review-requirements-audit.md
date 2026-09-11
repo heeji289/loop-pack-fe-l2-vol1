@@ -183,14 +183,71 @@ A11·R23은 [e2e-scope-review](../../.claude/skills/e2e-scope-review/SKILL.md)�
 
 > **추기 (2026-09-11)**: 수용 2건은 같은 날 해소됐다 — 미이관 커밋은 PR #34 병합으로 main에 반영됐고, 낡은 `pr-review.mjs` 사본은 main 버전으로 교체했다. 리뷰 미결은 schedule 첫 발화 확인(09-14)만 남는다.
 
+### E2E 범위 (티켓 06)
+
+| ID | 판정 | 정본 | 읽히는 경로 | 결정 근거 |
+| --- | --- | --- | --- | --- |
+| A11 · R23 | 신규 | `.claude/skills/e2e-scope-review/SKILL.md` | AGENTS.md 코드 규칙의 스킬 포인터 + description 트리거 | 발제 9주차의 순서(흐름 후보 → 통합 테스트로 못 보는 부분 → 사람이 로그 세션 비율로 선택)를 그대로 절차로 썼다. 로그 산식·봇/중복·분모와 대용 지표, 관측 한계는 이 스킬이 판정 기준으로 들고, **최종 범위 결정은 작성자**가 한다. 기존 `docs/rfc/week09-e2e-scope.md` C절의 결정은 출처와 함께 보존하고 새 범위 결정은 하지 않았다. 계측 코드 계약은 티켓 04(`state-data.md`·`self-review`)와 중복 복사하지 않았다 |
+
+### PR diff 리뷰·판별·프롬프트 개선 (티켓 02 · 08)
+
+| ID | 판정 | 정본 | 읽히는 경로 | 결정 근거 |
+| --- | --- | --- | --- | --- |
+| A14 (리뷰 쪽) | 보완 | `.claude/skills/code-review/SKILL.md` 3단계 「Identify the standards sources」 | 작성자가 `/code-review` 호출, `self-review` 4단계 라우팅 | 일반 Standards/Spec 두 축은 유지하고 **이 저장소의 정본과 라우팅만** 얹었다 — 변경 경로별로 어떤 rule 파일과 어떤 검토 스킬을 고를지 표 하나. 규칙 내용은 복사하지 않고 정본을 인용하게 했다. 존재하지 않던 `docs/agents/issue-tracker.md` 참조를 지우고 spec 출처를 `specs/*.spec.md` → `.scratch/*/issues/` → `docs/rfc/`로 바로잡았다(아래 「빈틈 3」). 스펙이 시점 기록이라 나중 결정이 덮을 수 있다는 점도 명시했다 |
+| A14 (승격 쪽) | 해당 없음 | — | — | `rule-promotion`을 **별도 스킬로 만들지 않는다.** 5단계에서 한 번 쓰는 절차이고 판정식·예외·최종 선택이 전부 작성자 몫이라, 재사용 가능한 입력·출력 계약이 서지 않는다. 절차는 스펙 5절에 두고 실행 기록은 티켓 09가 남긴다 |
+| R30 | 신규 | `scripts/week-10-ci/pr-review.md` + `.github/workflows/ai-review.yml` + `scripts/week-10-ci/pr-review.mjs` · 판별 기록은 [week10-ai-review.md](week10-ai-review.md) | `workflow_run` 자동 실행 (advisory), 기준·프롬프트는 **base SHA에서** 읽음 | 입력·프롬프트 버전 고정(`rulesRef`·`promptHash`), 부분 리뷰 표시(`status`가 `completed`·`partial`·`input_limit`·`invalid_output`·`timeout`·`auth_unavailable`을 구별), 실행 한도(1회 + 수동 재실행 1회·3분·1MiB·6,000토큰). **유효 지적 1·오탐 1의 작성자 판정과 프롬프트 v1/v2 비교는 [week10-ai-review.md](week10-ai-review.md)에 제출물로 커밋한다** — `.scratch/`는 추적되지 않아 제출에 들어가지 않는다. 룰 양방향 검증과 책임 이동은 5단계(티켓 09) 몫 |
+
+**설계 입력과 diff 입력의 구별** — `pr-review.mjs:136-155`가 변경 경로로 `route`를 넷으로 가른다.
+
+| route | 조건 | 처리 |
+| --- | --- | --- |
+| `guidance` | `AGENTS.md`·`CONVENTIONS.md`·`.claude/**`·`pr-review.*` 변경 | 리뷰한다 — 리뷰 품질을 바꾸는 변경이므로 문서라고 생략하지 않는다 (감사 「빈틈 4」) |
+| `code` | 런타임 파일이 하나라도 있음 | 리뷰한다 |
+| `design` | `docs/rfc/**`·`specs/**`만 변경 | 리뷰한다 — 전제와 관찰 경계를 본다 |
+| `docs` | 나머지(일반 안내 문서) | **`skipped: ordinary_docs_manual_review`** — 사람 검토로 넘긴다 |
+
+즉 "모든 변경에 모든 스킬"도 아니고 "문서면 전부 생략"도 아니다. 설계 문서(`design`)와 지침(`guidance`)은 diff 입력으로 리뷰하되 적용 기준이 다르고(`pr-review.md` 3항), 일반 문서만 생략한다. 로컬 스킬 중 `state-design-review`·`test-design-review`·`e2e-scope-review`는 diff가 아니라 **분류 표·시나리오·로그**를 입력으로 받는 설계 절차라 이 경로와 별개다 — 작성자가 구현 전에 직접 호출한다.
+
+**실제 도구가 관련 기준을 골라 읽는지 확인** — CI AI 리뷰가 남긴 `rules_read`를 run별로 대조했다. 기준 목록은 `pr-review.mjs:167-184`가 변경 경로로 정한다.
+
+| run | 변경 성격 | 실제로 실린 기준 | 판정 |
+| --- | --- | --- | --- |
+| [34519398473](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34519398473) | `CurrencySelect.tsx`(저장 상태를 쓰는 컴포넌트) | rules 4 + `architecture-review`·`component-review` | **부분 성공** — `state-design-review`가 안 실렸다. 파일 경로에 `state|store|query|auth`가 없어서다. 지적은 항상 실리는 `state-data.md`가 만들어냈다 |
+| [34517159942](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34517159942) | `quality.yml`·`decide-e2e-scope.mjs` 등 CI | rules 4 + `architecture-review`·`component-review`·`e2e-scope-review`·`state-design-review`·`test-review` | **과다** — CI 변경에 상태 설계·E2E 범위 스킬까지 실렸다 |
+| [34515892450](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34515892450) | `week10-ci.md`(측정 문서) | `testing.md` + 3개 스킬 | base(`2483119b`)에 `.claude/rules/`가 `testing.md`뿐이던 시점이라 정상. `performance.md` 부재는 기준 고정의 결과이지 라우팅 실패가 아니다 |
+
+**결론**: 파일 경로 정규식 라우팅은 놓침과 과다를 모두 낸다. 지금은 rule 파일 4개가 **항상** 실려 받쳐 주고 있어 결과가 맞았다. 경로가 아니라 diff 내용으로 고르려면 모델 호출이 한 번 더 필요해 이번 범위에서는 바꾸지 않는다 — 대신 **rule 파일을 항상 싣는 현재 설계가 라우팅 오차를 흡수한다**는 것을 근거로 남긴다. 로컬 스킬 쪽은 `code-review` 3단계 표와 AGENTS.md 포인터가 사람·에이전트의 선택 경로다.
+
 ## 현재 연결에서 확인한 구체적인 빈틈
 
 1. **테스트 검사 범위 불일치.** testing rule과 test-review의 테스트 파일 범위에는 `scripts/**/*.test.*`가 빠져 있다. ESLint의 Vitest 특화 규칙도 `{src,tests}/**/*.test.*`에만 적용된다. E2E가 test-review 대상이라는 사실과 skip/only/truthiness가 E2E에서도 lint로 차단된다는 것은 별개다. 기존 E2E 결과 검사는 실행 수/상태를 검사하지만 모든 테스트 코드 패턴의 정적 검사를 대체하지 않는다. test-review는 의도 출처에서 정적 검사 조건을 제외하므로, 새 CI/룰 회귀 검수에서는 **검사기의 입력 → 진단/exit code도 공개 동작으로 검토**하도록 적용 계약을 보완해야 한다. → 티켓 05에서 닫았다(아래 배치 결정). 다만 `src/app/api/**`는 truthiness 조항만 꺼져 있고 나머지 Vitest 규칙은 걸린다는 점을 이 문단이 뭉뚱그렸다 — 정확한 범위는 `eslint.config.mjs`가 정본이다.
 2. **명문화와 차단 혼동.** 고정 대기 금지, 검증 대상/API client를 mock하지 말라는 문장이 있어도 해당 패턴의 결정적 차단은 별도 확인이 필요하다. 현재 E2E의 실효 ESLint 설정에는 고정 sleep을 막는 규칙이 없다. 현재 위반이 발견되지 않은 것을 미래 위반 차단의 증거로 세면 안 된다.
-3. **code-review와 프로젝트 지침의 연결.** 일반 Standards/Spec 두 축은 있지만 어떤 변경에 상태/테스트/CI 검토와 관련 규칙를 선택하는지 없다. 참조하는 `docs/agents/issue-tracker.md`도 현재 저장소에 없어, 로컬 spec/issue를 실제로 찾아가는 경로를 바로잡아야 한다.
+3. **code-review와 프로젝트 지침의 연결.** 일반 Standards/Spec 두 축은 있지만 어떤 변경에 상태/테스트/CI 검토와 관련 규칙를 선택하는지 없다. 참조하는 `docs/agents/issue-tracker.md`도 현재 저장소에 없어, 로컬 spec/issue를 실제로 찾아가는 경로를 바로잡아야 한다. → **티켓 08에서 닫았다** — 없는 참조 두 곳을 지우고, 3단계에 변경 경로 → rule 파일·검토 스킬 라우팅 표를 넣었으며, spec 출처를 이 저장소의 실제 위치로 바로잡았다. 표준 출처로 들던 `CODING_STANDARDS.md`·`CONTRIBUTING.md`도 이 저장소에 없어 `CONVENTIONS.md`·`AGENTS.md`로 교체했다.
 4. **문서 전용 PR 생략의 예외.** 일반 설명 문서와 review rule·skill·prompt·ADR 변경을 동일하게 생략하면 리뷰 품질을 바꾼 변경이 검수되지 않는다. 상태·테스트 설계 문서는 해당 검토 절차, 기준 문서는 고정 사례 검수 등 목적별 검증을 정해야 한다. 이 때문에 E2E 실행 조건을 바꿀 필요는 없다.
 5. **C1~C9 외 관찰로 밀려나는 주요 요구.** 성능·테스트·인증·SSR·오류 처리 기준이 대부분 “기준 외 관찰”이 되면 10주 학습 명문화의 목적을 달성하지 못한다. 해당 변경에서는 정식 검토 항목이어야 한다.
 6. **지침 우선순위.** 발제의 Context 인증 예시나 오래된 스펙을 최신 세션 Query 설계보다 우선하면 정상 코드를 오탐한다. 유효한 프로젝트 요구사항·결정 → 실제 계약 → 발제의 일반 원칙 순서로 적용하고, 충돌은 보고한다.
+
+## 4단계가 실제로 모은 반복 지적 (5단계 입력)
+
+티켓 08에서 돌린 리뷰 10건(로컬 스킬 9 + 프롬프트 v2 재실행 1)과 CI AI 리뷰 기록을 합쳐 집계했다. **같은 대상을 다시 돌려 나온 중복은 제외**했다 — 리뷰 ⑨와 ⑩은 같은 파일 목록이므로 겹치는 지적을 한 번으로 센다. 원문은 [verification/08-review-*](../../.scratch/week10-step4-5-ai-review-and-rule-promotion/verification/).
+
+규칙 선택·승격 스킬·게이트 구현은 이 절의 범위가 아니다. 작성자가 티켓 09에서 고른다.
+
+| 패턴 | 독립 리뷰 수 | 실제 위치 | 이미 지키는 반례 | 결정적 판별 가능성 |
+| --- | --- | --- | --- | --- |
+| 복구 버튼이 재시도 중 비활성화되지 않음 | 3 (③⑦⑧) | `CartPage.tsx:112,125` · `SessionMenu.tsx:34` · `MyPage.tsx:45` · `OrderNewPage.tsx:31` · `OrdersPage.tsx:57,81,112` | `HomeContent.tsx:21` · `ProductList.tsx:89,111` | **높음** — "`refetch`를 부르는 `onClick`을 가진 `button`에 `disabled`가 없다"는 구문으로 갈린다. 경계는 refetch가 아닌 버튼과 유니온이 `isFetching`을 안 내주는 경우 |
+| 픽스처·핸들러가 정본에서 파생되지 않고 재생성 | 3 (⑥⑨⑩) | `e2e/auth.fixture.ts:13-27` · `tests/msw/handlers.ts`에 `/api/orders` 기본 핸들러 부재 · `USER_ORDERS` 리터럴이 파일마다 | `tests/commerce-header.dom.test.tsx`가 `app/api/_data/auth`를 import | 중간 — "픽스처 파일 밖에서 엔티티 리터럴을 만든다"는 구문으로는 정상 override와 안 갈린다 |
+| 테스트 이름이 주장하는 것을 단언이 확인하지 않음 | 3 (②⑥⑨) | `useSelect.dom.test.tsx:125,633` · `order-new-page.dom.test.tsx:196` · `queries.test.ts:11` | — | **낮음** — 이름과 단언의 의미 대조는 맥락 판단. AI·사람에 남긴다 |
+| 갱신 실패가 직전 화면을 파괴 (`isError`를 데이터 유무보다 먼저 판정) | 2 (⑦⑧) | `SessionMenu.tsx:33` · `use-order-draft.ts:45` · `OrdersPage.tsx:78` | `HomeContent.tsx:15` · `ProductList.tsx:82` · `CartPage.tsx:109` | 중간 — 구문은 갈리지만 "결제 직전이라 일부러 전면 차단"이 정상 예외로 있을 수 있다(리뷰 ⑧ 질문 1) |
+| 수동 동기화를 지키는 장치 없음 (보호 경로 3곳) | 3 (④⑦⑩) | `proxy.ts:31` matcher · `login-url.ts:44` `isProtectedPath` · `requireServerSession` 호출부 | — | 중간 — 룰이 아니라 **드리프트 테스트 한 개**로 닫는 게 성격에 맞다(⑩ 제안) |
+| 제품 사용처가 없는 코드 | 2 (①⑤) | `shared/ui/select/**` · `examples/week-05-layout/**` · `app/demos/**` | — | **높음** — 도달 불가 모듈은 스크립트로 판별 가능. 단 데모·학습 자산을 공인 예외로 둘지가 선결 |
+| catalog 조인 중복 | 3 (③⑤⑧) | `CartPage.tsx:65` · `OrdersPage.tsx:103` · `use-order-draft.ts:56` | — | **낮음 + 결론 불일치** — ③은 공통화하라, ⑧은 하지 마라. 맥락 판단이라 기계에 못 내린다 |
+| `role="status"` 누락 | 1 (⑧) | `OrderNewPage.tsx:24` · `OrdersPage.tsx:75` | `ProductListPending.tsx:11` · `HomeContent.tsx:32` · `ProductList.tsx:76` | 반복 미달 — 리뷰 1건 |
+| 타임존 고정 없는 `toLocaleString` 단언 | 1 (⑥) | `orders-page.dom.test.tsx:53` | — | 반복 미달 — 리뷰 1건 |
+
+**티켓 05가 넘긴 후보**도 함께 둔다 — E2E 고정 sleep 금지와 `scripts`·`e2e`의 테스트 무력화 차단. 둘 다 4단계에서 문장 규칙까지만 두었고 실효 ESLint에는 없다(감사 「빈틈 1·2」).
+
+**반복 미달 주의**: 위 「독립 리뷰 수」는 이번 4단계 한 번의 집계다. 2 이상이라고 해서 10주간 반복된 지적이라는 뜻은 아니다. 5단계 선택 시 과거 사람 리뷰·PR 기록과 대조해야 "반복"이 성립한다.
 
 ## 5단계 승격 후보
 
@@ -208,6 +265,36 @@ A11·R23은 [e2e-scope-review](../../.claude/skills/e2e-scope-review/SKILL.md)�
 | 파일·workflow 구조 규칙 | 정해진 파일 계약/필수 필드의 참·거짓, 실제 parser/스크립트 경계 | 과제가 허용하는 CI 스크립트 경로도 후보. YAML 의미를 부정확한 grep으로 판별하지 않기 |
 
 기존 FSD/Public API·Vitest 단언 규칙은 재구현하지 않는다. 상태 복사·추상화·성능 개선 효과처럼 맥락이 핵심인 판단은 문장 규칙/AI/사람에 남긴다. 새로운 의존성이 필요한 수단은 프로젝트 Ask first 대상이지만, 후보 조사와 기존 도구로 표현 가능한지 확인하는 일은 먼저 수행할 수 있다.
+
+## 책임 배치 (4단계 종료 시점)
+
+5단계가 이 표의 한 칸을 「AI·사람」에서 「기계」로 옮긴다. 옮기기 **전** 상태를 여기 고정해 두어 전후를 대조할 수 있게 한다.
+
+### ID별 담당
+
+위 배치 표의 44개 ID를 담당으로 다시 묶는다. 같은 ID가 두 칸에 걸치면 **기계가 막는 범위와 판단으로 남는 범위를 갈라** 적는다.
+
+| 담당 | ID | 무엇이 그렇게 만드나 |
+| --- | --- | --- |
+| **기계가 전부 막음** | R12 (레이어·Public API) · R20 (테스트 무력화·단언 없음, **단 `{src,tests}/**/*.test.*` 범위 안에서만**) | ESLint `boundaries/dependencies` · `no-restricted-imports` · `import-x/no-cycle` · vitest 규칙 블록 |
+| **기계 + 판단 병행** | R01 (any/as는 lint, 기존 유틸 재사용·입력 신뢰 경계는 판단) · R25 (이름·props 조합은 타입, 발행 위치·중복은 규칙 없이 남김) · 검사기 테스트 (종료 코드는 테스트, 어떻게 나눌지는 설계) | lint·typecheck가 일부만 덮는다 |
+| **AI·사람 판단** | A01~A04 · A06 · A08~A14 · R02~R11 · R14~R19 · R21~R24 · R26 · R27 · R29 · R30 | 맥락이 핵심이라 문장 규칙 + 검토 절차로 둔다 |
+| **해당 없음 (범위 제외)** | A05 · A07 · R13 | RFC 검토와 성능 분석 전용 스킬은 스펙 Out of Scope |
+| **5단계 승격 후보로 남김** | R20의 `scripts`·`e2e` 구간 · R27의 고정 sleep | 문장 규칙까지만 두었고 실효 ESLint에 없다 (「빈틈 1·2」) |
+| **R28** | 부분 위임 | 산출물이 대상에 있을 때만 적용 — 도입 자체는 별도 선택 |
+
+「AI·사람 판단」이 가장 큰 묶음인 것이 이 단계의 결론이다. 10주 학습 기준의 대부분은 참·거짓을 기계로 가를 수 없고, 5단계가 옮기는 것은 그중 **하나**다.
+
+| 담당 | 이 프로젝트에서 실제로 맡는 것 | 증거 |
+| --- | --- | --- |
+| **기계** (CI·lint·type·test) | 레이어 import 방향·슬라이스 격리·딥 import·순환(ESLint `boundaries`·`no-restricted-imports`·`import-x/no-cycle`) · 테스트 비활성화·단언 없음·truthiness(`{src,tests}/**/*.test.*`) · 타입 · 번들 예산 · Lighthouse 임계값 · env 생명주기 · E2E 실행 수와 상태 | `pnpm lint` exit 0 (리뷰 ⑤) · `eslint.config.mjs:99,128-226,239` · `scripts/week-10-ci/**` · `quality.yml` |
+| **AI 리뷰** | 설계 냄새와 반례 제안, 규칙 위반 후보 지목, 룰 초안. **비결정적이라 advisory** — required·PR guard·배포 조건에 넣지 않는다 | 리뷰 10건 원문 [08-review-*](../../.scratch/week10-step4-5-ai-review-and-rule-promotion/verification/) · CI AI 리뷰 `ai-review.yml`(`permissions: contents: read`, required 아님) |
+| **사람 리뷰어** | 설계 대안, 변경 위험, 맥락 판단 | 이번 주차에는 셀프 리뷰로 대체 — 별도 사람 리뷰어 없음을 명시한다 |
+| **작성자** | 지적의 수용·반려 판정 · 단언 문구와 모킹 경계 · E2E 범위 · 예산과 required 배치 · 승격할 규칙 선택 · 최종 검증 | 유효/오탐 판정과 근거: [08-review-evidence](../../.scratch/week10-step4-5-ai-review-and-rule-promotion/verification/08-review-evidence.md) |
+
+**기계에 못 내리는 것으로 확인된 것** — 위 집계표의 「결정적 판별 가능성: 낮음」 두 줄이다. 테스트 이름과 단언의 의미 대조, catalog 조인의 공통화 여부. 후자는 같은 스킬이 대상 범위에 따라 정반대 결론을 냈다(리뷰 ③ vs ⑧)는 것이 그 자체로 근거다.
+
+**AI가 틀리는 방식으로 확인된 것** — 자료에 없는 사실을 전제로 삼는다. CI AI 리뷰는 GitHub Actions의 `!cancelled()` 의미론을 지어냈고(`confidence: high` 2건, run [34518767357](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34518767357)의 실제 실행으로 반증), 로컬 `test-review` v1은 다른 문서의 명령(`--workers=2`)을 CI 명령으로 옮겨 적었다. 두 오탐 모두 **결론이 아니라 근거**가 틀렸다는 점이 같다.
 
 ## 미결정 사항
 
