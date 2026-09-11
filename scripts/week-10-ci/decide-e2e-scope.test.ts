@@ -93,8 +93,17 @@ it('변경 판별이 실패하면 핵심 E2E를 판정 불가로 두고 실행�
   expect(output).toContain('E2E: 실행 불가');
 });
 
+// PR 외 이벤트에서 workflow가 실제로 넘기는 값 — changes job이 skip되고
+// base_ref·draft·runtime은 빈 문자열이다. 이 조합으로 돌려야 분기 순서 변경을 잡는다.
+const NON_PR_INPUTS = {
+  BASE_REF: '',
+  IS_DRAFT: '',
+  RUNTIME: '',
+  CHANGES_RESULT: 'skipped',
+};
+
 it('main push면 전체 E2E를 실행하고 정기 측정은 하지 않는다', () => {
-  const { outputs } = decide({ EVENT_NAME: 'push', BASE_REF: '' });
+  const { outputs } = decide({ EVENT_NAME: 'push', ...NON_PR_INPUTS });
 
   expect(outputs.full).toBe('true');
   expect(outputs.core).toBe('false');
@@ -105,7 +114,7 @@ it('main push면 전체 E2E를 실행하고 정기 측정은 하지 않는다', 
 it.each(['schedule', 'workflow_dispatch'])(
   '%s면 전체 E2E와 정기 측정을 함께 실행한다',
   (eventName) => {
-    const { outputs } = decide({ EVENT_NAME: eventName, BASE_REF: '' });
+    const { outputs } = decide({ EVENT_NAME: eventName, ...NON_PR_INPUTS });
 
     expect(outputs.full).toBe('true');
     expect(outputs.periodic).toBe('true');

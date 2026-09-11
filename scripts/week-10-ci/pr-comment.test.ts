@@ -158,17 +158,44 @@ it('이전 코멘트가 없으면 새로 만들고 job 결과·SHA·예산 초�
   );
 });
 
-it('의도적으로 생략된 job만 있으면 전체를 PASS로 표시한다', async () => {
-  state.jobs = [
-    { name: 'changes', conclusion: 'success' },
-    { name: 'checks', conclusion: 'success' },
-    { name: 'build-e2e', conclusion: 'success' },
-    { name: 'guard', conclusion: 'success' },
-  ];
+const allSuccess = () =>
+  ['changes', 'checks', 'build-e2e', 'guard'].map((name) => ({
+    name,
+    conclusion: 'success',
+  }));
+
+it('네 job이 모두 성공하면 전체를 PASS로 표시한다', async () => {
+  state.jobs = allSuccess();
 
   await runComment();
 
   expect(postedBody()).toContain('## Quality CI: PASS');
+});
+
+// 네 job은 PR run에서 실행 조건이 항상 참이다 — skipped는 곧 예상 밖 생략이라
+// 성공으로 바뀌면 안 된다. null(미완료)·job 누락도 같다.
+it.each([
+  ['생략됐으면', 'skipped', '⏭️ skipped'],
+  ['취소됐으면', 'cancelled', '⏹️ cancelled'],
+  ['결론이 없으면', null, '❔ 미실행'],
+])('필요한 job이 %s PASS로 표시하지 않는다', async (_, conclusion, cell) => {
+  state.jobs = allSuccess().map((job) =>
+    job.name === 'build-e2e' ? { ...job, conclusion } : job,
+  );
+
+  await runComment();
+
+  expect(postedBody()).toContain('## Quality CI: FAIL');
+  expect(postedBody()).toContain(`| build·env·번들 예산·E2E | ${cell} |`);
+});
+
+it('job 목록에 없는 job은 미실행으로 표시하고 PASS로 두지 않는다', async () => {
+  state.jobs = allSuccess().filter((job) => job.name !== 'guard');
+
+  await runComment();
+
+  expect(postedBody()).toContain('## Quality CI: FAIL');
+  expect(postedBody()).toContain('| 병합 게이트 | ❔ 미실행 |');
 });
 
 it('마커가 같은 봇 코멘트가 있으면 새로 달지 않고 그 코멘트만 갱신한다', async () => {

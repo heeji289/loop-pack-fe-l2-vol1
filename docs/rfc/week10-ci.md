@@ -344,6 +344,23 @@ Lighthouse는 정기·수동 실행에서 홈과 상품 목록을 각각 3회 �
 - **장바구니 전체 선택** — [PR #13](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/13), run 34443836321. 실제 기능 추가(테스트 선작성 빨간불 → 초록). CartPage·cart-store·CSS module·페이지 테스트 변경 → **cart 관련 13개만 정밀 선택**. 선택 13개는 cart-store를 import하는 5곳(CartPage·상품 카드의 담기 버튼·header 배지·OrderForm·providers)의 정적 사슬로 전부 설명되고 — HomePage·home-error가 포함된 이유도 홈 상품 카드의 담기 버튼이다. 제외 12개의 무관성: orders-page(내역은 API 조회)·my-page·로그인 계열·search-params(무관 도메인)·wishlist/checkout-store(자기 스토어만 검증)·API route 4개(클라이언트 store와 정적 무관 — 주문 흐름은 같은 run의 핵심 E2E가 커버). 같은 CSS라도 컴포넌트가 import하는 CartPage.module.css는 그래프 안(3개 선택), 전역 home.css는 그래프 밖(전체 폴백)이라는 대비도 확보했다.
 - **작업(dev·통합) 브랜치 정책** — 검증은 PR 단위다: 브랜치 직접 push는 workflow를 트리거하지 않고(`on.push`는 main뿐), 작업 브랜치 **대상** PR은 기본 검사·관련 integration을 그대로 실행하며 E2E만 생략한다(2차의 PR #8 실증 — unit 21·관련 8 실행 로그). dev에 쌓인 변경을 main으로 올리는 PR은 누적 전체 diff로 판별되어 그 시점에 핵심 E2E가 걸린다.
 
+### 실행 조건을 한 곳에서 판정하게 정리 (2026-09-11, ADR-12 편입분)
+
+같은 조건이 workflow step과 guard **두 곳에서 각각 계산**되고 있었다. 한쪽만 고치면 조용히 갈라지고, 갈라진 결과가 곧 "조건 버그로 인한 침묵 생략"이 된다.
+
+- 조건(main 대상 AND non-draft AND 런타임 변경)을 `scripts/week-10-ci/decide-e2e-scope.mjs` 하나로 모으고 workflow가 호출한다. `core`·`full`·`browsers`·`periodic`과 **생략 이유**를 출력한다.
+- main×draft×runtime 8조합의 기대값을 **손으로 적은 진리표**로 고정한 정책 테스트를 unit 집합에 뒀다 — `pnpm test:unit`에 포함되어 모든 PR에서 돈다. 기대값을 같은 조건문으로 재계산하면 중복이 테스트로 자리만 옮기므로, CI가 실제 부르는 그 명령을 실행해 `GITHUB_OUTPUT`을 읽는다.
+- guard는 재계산을 버리고 **선언된 결정과 실제 outcome의 대조**만 한다: 결정이 정확히 `true`/`false`인지, `true`면 outcome이 `success`인지, `false`면 `skipped`인지. 생략 이유도 판정 스크립트가 낸 값을 그대로 쓴다.
+
+**양쪽 경로 실 run 확인**
+
+| 경로 | run | 판정 | 결과 |
+|---|---|---|---|
+| 런타임 변경 PR | [34519689607](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34519689607) (PR #36) | `core=true` | `Core E2E (@critical)` 실행·성공, `guard: PASS — 핵심 E2E 실행·성공` |
+| 문서 전용 PR | [34550904064](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34550904064) (PR #40) | `core=false` | `## E2E: 의도적 생략 / 이유: 문서 전용 변경`, `Core E2E` skipped, guard PASS |
+
+문서 전용 run의 guard 입력은 `RUNTIME: false` · `CORE_EXPECTED: false` · `CORE_OUTCOME: skipped` · `CORE_SKIP_REASON: 문서 전용 변경`이었다. 판정 스크립트가 낸 이유가 job 출력을 거쳐 guard까지 그대로 흘렀다는 뜻이라, 단일 출처 전환이 배선 수준에서 확인된다. 브라우저 설치도 함께 생략되어 build-e2e가 46초로 끝났다(런타임 PR 1분 14초).
+
 ## 3단계 — env 게이트
 
 ### 게이트 구성
@@ -527,7 +544,7 @@ summary에 후보의 동적 인증 API HTTP 401·본문 확인 PASS와 Productio
 
 `pnpm build` = `next build`로 되돌렸고, Next 설정 로딩의 빌드용 env 검증은 그대로다. 서버용 env는 `instrumentation.register()`가 맡는다.
 
-**Preview를 일부러 제외했다.** Preview가 초과로 실패해도 얻는 게 없다 — 병합은 이미 CI 예산 검사가 막고 있고, 잃는 것은 리뷰어가 볼 화면이다. 반대로 Production은 게시 직전이라 막을 실익이 있다. 조건문 의미(production만 실행, build 실패 시 미실행)는 같은 셸 표현식을 로컬에서 `VERCEL_ENV` 세 경우로 실행해 확인했다.
+**Preview를 일부러 제외했다.** Preview가 초과로 실패해도 얻는 게 없다 — 병합은 이미 CI 예산 검사가 막고 있고, 잃는 것은 리뷰어가 볼 화면이다. 반대로 Production은 게시 직전이라 막을 실익이 있다. 조건문 의미(production만 실행, build 실패 시 미실행)는 같은 셸 표현식을 로컬에서 `VERCEL_ENV` 세 경우로 실행해 확인했고, 실제 초과 상태에서도 확인했다(아래 「Preview 제외 실증」).
 
 **배포 경로 실증 완료 (2026-09-11)**: [PR #28](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/28) 병합 커밋 `8ac18380`의 [run 34513756401](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34513756401) deploy job 로그에서 Vercel 원격 빌드가 `vercel.json`의 명령을 그대로 실행하는 것을 확인했다.
 
@@ -537,7 +554,16 @@ Running "pnpm build && if [ "$VERCEL_ENV" = production ]; then pnpm check:budget
 ## 번들 예산: PASS
 ```
 
-Production 후보 검증 후 같은 배포를 승격했다(`dpl_3sbQkLzH4pvofexvGwjugbxF8jve`). 이로써 "게시할 산출물에도 예산을 적용한다"가 설정 근거가 아니라 실행 근거가 됐다. Preview 제외는 아직 초과 상태를 만들어 확인하지 않았다 — 조건문의 의미만 로컬에서 확인한 상태다.
+Production 후보 검증 후 같은 배포를 승격했다(`dpl_3sbQkLzH4pvofexvGwjugbxF8jve`). 이로써 "게시할 산출물에도 예산을 적용한다"가 설정 근거가 아니라 실행 근거가 됐다.
+
+**Preview 제외 실증 (2026-09-11)**: 아래 빨간불 실험의 초과 커밋 `57697d5e`(홈 +35.4% 초과)에서 **Vercel Preview 배포는 success였다.** 같은 SHA의 CI는 `Bundle budget`에서 실패했으니, Preview 빌드에서는 `check:budget`이 실행되지 않았다는 뜻이다 — 실행됐다면 exit 1로 빌드가 깨졌을 것이다. `VERCEL_ENV` 분기가 실제 초과 상태에서 의도대로 동작했고, 예산을 넘긴 PR에서도 리뷰어가 볼 화면이 남는다는 설계 의도가 성립했다.
+
+| 커밋 | CI 예산 | Vercel Preview |
+|---|---|---|
+| `57697d5e` (초과) | ❌ `Bundle budget` 실패 | ✅ success ([배포](https://vercel.com/heeji289-6430s-projects/loop-pack-fe-l2-vol1/9i78YGLSzvWcyqePg5ZmdTW6WjoZ)) |
+| `af6d63ad` (복구) | ✅ PASS | ✅ success |
+
+이 실증은 빨간불 실험의 부산물이다 — Preview를 깨뜨리려고 따로 만든 상황이 아니라, 초과 PR을 만들었더니 Preview가 살아남은 것을 확인한 것이다.
 
 ### 세 환경의 측정값 일치 (2026-09-11)
 
@@ -553,7 +579,47 @@ CI와 Vercel은 **세 대상 모두 바이트까지 동일**하다. 로컬과는
 - 실행 검사 `check-budget.test.ts` 9케이스(integration-cli, 모든 PR 실행): 정상 통과·**임계값 동일 통과**·초과 시 초과량/초과율 표시·대상 파일 누락·산출물 없음·임계값 누락 실패, 그리고 기준선 있음/없음·다음 기준선 기록. 실제 명령의 종료 코드와 공개 출력을 검증한다. 첫 실행에서 설정 오류 시 size-limit이 `{error}` JSON을 내는 경로 미처리를 빨간불로 잡아 고쳤다.
 - summary·stdout에 대상·집계·측정값·base 대비 증가량·임계값·여유/초과량·초과율 표를 남기고, 같은 결과를 `reports/budget.md`(비추적)로도 남긴다 — PR 코멘트 게시가 재측정 없이 소비한다. 측정 실패(대상 누락·수집 실패)일 때도 같은 파일에 미측정 사유를 남겨 코멘트가 원인을 그대로 싣는다.
 - **base 대비 증가량**은 main push가 남긴 `reports/budget.json`을 Actions 캐시(`budget-baseline-main-<sha>`, 없으면 접두 일치로 최근 main)로 받아 예산 검사가 계산한다. base를 다시 빌드하지 않아 PR 비용은 그대로다. 기준선이 없으면 열을 생략하고 그 사실을 적는다 — 증가량을 지어내지 않는다.
-- **대기**: 초과 PR의 빨간불·병합 차단·원복 실증과 코멘트 가시성은 다음 티켓(빨간불 실험)에서 수행한다.
+### 빨간불·복구 실증 (2026-09-11, PR #35)
+
+예산 검사가 한 번도 실패해 본 적 없으면 잘 도는 것과 조용히 생략되는 것을 구별할 수 없다. 검사기 테스트는 픽스처를 주면 스크립트가 종료 코드 1을 낸다는 것까지만 증명하고, 그 뒤의 사슬(실제 코드 증가 → 예산 step 실패 → build-e2e 실패 → guard 실패 → required 병합 차단 → 코멘트 표시 → 원복 초록불)은 덮지 않는다. [실험 PR #35](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/35)로 그 사슬을 밟았고 **머지 없이 닫았다**.
+
+**무엇을 키웠나.** 임계값을 낮추거나 압축으로 사라지는 주석을 넣지 않았다. 커머스 공용 헤더에 표시 통화 선택을 넣고 저장된 설정을 zod 스키마로 검증하게 했다 — 코드 자체는 타당하지만 공용 레이아웃이라 **zod가 홈·목록 초기 클라이언트 번들로 딸려 들어온다.** RFC가 이미 위험으로 지목해 둔 시나리오다.
+
+| 구분 | SHA | run | 홈 초기 JS | 판정 |
+| --- | --- | --- | --- | --- |
+| 빨간불 | `57697d5e` | [34518767357](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34518767357) | 231,993 B (임계 171,356) | **초과 60,637 B (+35.4%)** |
+| 초록불 | `af6d63ad` | [34519214029](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34519214029) | 159,491 B | 여유 11,865 B |
+
+빨간불에서 목록은 +57,081 B(+32.5%), 공유는 +66,237 B(+40.3%) 초과였다. 복구는 **임계값·검증 조건을 그대로 둔 채** 클라이언트 zod 의존만 걷어냈다 — 확인할 것이 "아는 통화 코드인가" 하나뿐이라 목록 대조로 대체했고 기능과 방어 범위는 유지했다. 통화 선택 기능 자체가 남긴 증가(+3,742 B)는 여유 안이다.
+
+**차단이 실제로 걸렸다.** 빨간불 run의 job 결과는 `changes` ✅ · `checks` ✅ · `build-e2e` ❌ · `guard` ❌ · `deploy` skipped였고, 실패 step은 `Bundle budget` 하나다. guard 주석은 `guard 실패 — build·E2E job이 성공하지 않았다 (failure)`. PR의 병합 상태는 `mergeable=MERGEABLE`이지만 `mergeStateStatus=BLOCKED` — required가 막았다는 뜻이다. lint·typecheck·490개 테스트는 전부 통과했으므로 **빨간불의 원인은 예산 게이트 하나로 격리된다.**
+
+**설계 의도 두 가지가 함께 확인됐다.**
+
+- 예산이 실패해도 `Server env lifecycle`은 계속 돌아 ✅로 판정됐고, 코멘트의 env 절은 "미측정"이 아니라 PASS로 표시됐다. 예산 실패가 env 판정을 가리지 않는다.
+- Vercel Preview 배포는 성공했다. 예산 게이트를 Production에만 걸어 둔 결정대로, 초과 PR에서도 리뷰어가 볼 화면이 남는다.
+
+**코멘트만으로 판독된다.** 원시 로그를 열지 않고 대상·집계·측정값·base 대비 증가량·임계값·초과량·초과율을 읽을 수 있었고, 아티팩트 `gate-reports`의 `budget.md`와 대조해 같은 값임을 확인했다. 코멘트는 **하나가 유지된 채 갱신**됐다 — 원복 후에도 새 댓글이 생기지 않고 같은 코멘트가 run `34519214029`·SHA `af6d63ad` 기준 PASS로 바뀌었다.
+
+**두 채널이 같은 결과를 싣는다.** 코멘트와 job summary를 나란히 놓고 대조했다 — 세 대상의 측정값·base 대비·임계값·초과량·초과율이 자릿수까지 같고, 아티팩트 `gate-reports`의 `budget.md`와도 같다. 표시를 위해 검사를 다시 돌리지 않는다는 계약이 실제로 지켜진다.
+
+| | 빨간불 (`57697d5e`) | 초록불 (`af6d63ad`) |
+| --- | --- | --- |
+| PR 코멘트 | ![실패 코멘트](images/01-comment-fail.png) | ![성공 코멘트](images/03-comment-pass.png) |
+| job summary | ![실패 summary](images/05-summary-fail.png) | ![성공 summary](images/06-summary-pass.png) |
+| run 전체 | ![실패 run](images/02-run-fail.png) | ![성공 run](images/04-run-pass.png) |
+
+**대조하다 찾은 것 — summary의 `env 검증` 제목 중복.** 위 캡처 시점의 summary에는 `env 검증: PASS (build/local)`(Build step)과 `env 검증: PASS`(서버 실행 검사)가 **같은 제목으로 두 번** 찍혀 있었다. 검증 시점이 둘이라 중복 기록은 아니지만, 읽는 쪽에서는 같은 판정이 두 번 나온 것으로 보인다.
+
+Build step의 성공 기록을 지워 정리했다. 서버 env 실행 검사의 판정이 이미 `빌드용 통과. 실제 next start의 …`로 **두 단계를 묶어** 서술하므로, 앞의 한 줄은 그것과 겹치기만 한다. 실패는 각 검증 지점이 그 자리에서 남기므로 잃는 정보가 없다 — 지금은 어느 경로에서도 `env 검증` 제목이 정확히 하나이고, 실패일 때는 제목이 단계를 밝힌다.
+
+| 경로 | summary·`reports/env.md`에 남는 판정 |
+| --- | --- |
+| 빌드용 env 오류 | `env 검증: FAIL (build/local)` + 변수명·이유 |
+| 서버 실행 검사 실패 | `env 검증: FAIL (서버 실행)` + 실패한 검사 이름 |
+| 둘 다 통과 | `env 검증: PASS` (본문이 두 단계를 서술) |
+
+코멘트는 `reports/env.md`를 그대로 싣는 계약이라 이 정리가 두 채널에 함께 반영된다.
 
 ### required 판단 — env와 같이 별도 check를 만들지 않았다
 
@@ -699,6 +765,21 @@ URL별 임계값이 필요해 `assert.assertions` 대신 `assert.assertMatrix`�
 이 로컬 중앙값(홈 482.995)은 앞 「로컬 검증」 절의 626.909와 다른 collect 세션의 값이다. 같은 로컬에서도 세션 간 144 ms가 움직이는데 CI의 run 중앙값은 2.9 ms 안에 모인다 — 임계값 근거를 로컬이 아니라 CI 분포에서 뽑은 이유이기도 하다.
 
 **알려진 한계 (실측 확인)**: `assertMatrix`는 어떤 패턴에도 매칭되지 않은 URL에 assertion을 **하나도 적용하지 않고 조용히 통과**시킨다(LHCI 0.15.1 `resolveAssertionOptionsAndLhrs`가 매칭 0건이면 early return). `collect.url`에 URL을 추가하고 패턴을 안 늘리면 그 화면은 측정만 되고 판정되지 않는다. 두 목록이 같은 파일 안에 인접해 있다는 점에 기대고 있으며, 별도 검사기는 두지 않았다 — Lighthouse가 병합·배포를 막지 않는 advisory 게이트라 비용 대비 이득이 낮다고 판단했다.
+
+### CI 정상 판정 확인 (2026-09-11)
+
+assert 활성화 커밋 `5caafb1a`에서 dispatch [34508298144](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34508298144) 성공. Lighthouse step 로그에 `Checking assertions against 2 URL(s), 6 total run(s)` → `All results processed!`가 남아, 임계값이 적용된 상태로 판정이 실행되고 통과했음을 확인했다.
+
+| URL | 지표 | 3회 원자료 | 중앙값 | 임계값 | 여유 |
+|---|---|---|---|---|---|
+| 홈 | LCP | 740.972 / 607.932 / 605.949 ms | 607.932 ms | 680 ms | 72.068 ms (10.6%) |
+| 홈 | CLS | 0.0725 / 0.0725 / 0.0725 | 0.0725 | 0.08 | 0.0075 (9.4%) |
+| 목록 | LCP | 726.408 / 617.376 / 615.634 ms | 617.376 ms | 832 ms | 214.624 ms (25.8%) |
+| 목록 | CLS | 0 / 0 / 0 | 0 | 0.01 | 0.01 |
+
+참고 지표: 홈 FCP 252.0 ms·TTFB 13.1 ms, 목록 FCP 209.6 ms·TTFB 10.3 ms (중앙값).
+
+**기준선 대비 관찰**: 홈 LCP 중앙값이 614.724 → 607.932 ms로 6.8 ms, 목록이 703.477 → 617.376 ms로 86.1 ms 낮아졌다. 목록의 하락폭은 기준선 R(57.659 ms)보다 크지만, 기준선 3 run과 이 run은 다른 시각·다른 러너에서 돌았고 코드 변경은 `lighthouserc.json`뿐이라 성능 개선으로 해석하지 않는다 — **오히려 run 간 변동이 같은 시각에 잰 R보다 크다는 첫 증거**이며, N=10%가 감당해야 할 몫이 이런 종류라는 뜻이다. 홈 여유는 72 ms로 목록(215 ms)보다 좁아 먼저 빨간불이 뜬다면 홈일 가능성이 높다. 정기 실행이 쌓이면 이 변동폭으로 N을 재검토한다.
 
 ### 남은 것 (대기)
 

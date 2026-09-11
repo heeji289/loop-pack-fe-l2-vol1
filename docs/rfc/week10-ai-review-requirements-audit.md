@@ -181,6 +181,8 @@ A11·R23은 [e2e-scope-review](../../.claude/skills/e2e-scope-review/SKILL.md)�
 
 최종 workflow 리뷰는 [07-workflow-checks](../../.scratch/week10-step4-5-ai-review-and-rule-promotion/verification/07-workflow-checks.md)에 있다. 수용 2건(트리의 낡은 `pr-review.mjs` 사본, `decide-e2e-scope`·`pr-comment.yml`의 main 미이관 — 둘 다 작성자 결정 대기), 반려 2건, 보류 1건(schedule cron 첫 발화 증거 — 2026-09-14 확인). 정상 생략·입력 부족 사례의 산출 형태도 같은 기록에서 검수했다.
 
+> **추기 (2026-09-11)**: 수용 2건은 같은 날 해소됐다 — 미이관 커밋은 PR #34 병합으로 main에 반영됐고, 낡은 `pr-review.mjs` 사본은 main 버전으로 교체했다. 리뷰 미결은 schedule 첫 발화 확인(09-14)만 남는다.
+
 ### E2E 범위 (티켓 06)
 
 | ID | 판정 | 정본 | 읽히는 경로 | 결정 근거 |
