@@ -344,6 +344,23 @@ Lighthouse는 정기·수동 실행에서 홈과 상품 목록을 각각 3회 �
 - **장바구니 전체 선택** — [PR #13](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/13), run 34443836321. 실제 기능 추가(테스트 선작성 빨간불 → 초록). CartPage·cart-store·CSS module·페이지 테스트 변경 → **cart 관련 13개만 정밀 선택**. 선택 13개는 cart-store를 import하는 5곳(CartPage·상품 카드의 담기 버튼·header 배지·OrderForm·providers)의 정적 사슬로 전부 설명되고 — HomePage·home-error가 포함된 이유도 홈 상품 카드의 담기 버튼이다. 제외 12개의 무관성: orders-page(내역은 API 조회)·my-page·로그인 계열·search-params(무관 도메인)·wishlist/checkout-store(자기 스토어만 검증)·API route 4개(클라이언트 store와 정적 무관 — 주문 흐름은 같은 run의 핵심 E2E가 커버). 같은 CSS라도 컴포넌트가 import하는 CartPage.module.css는 그래프 안(3개 선택), 전역 home.css는 그래프 밖(전체 폴백)이라는 대비도 확보했다.
 - **작업(dev·통합) 브랜치 정책** — 검증은 PR 단위다: 브랜치 직접 push는 workflow를 트리거하지 않고(`on.push`는 main뿐), 작업 브랜치 **대상** PR은 기본 검사·관련 integration을 그대로 실행하며 E2E만 생략한다(2차의 PR #8 실증 — unit 21·관련 8 실행 로그). dev에 쌓인 변경을 main으로 올리는 PR은 누적 전체 diff로 판별되어 그 시점에 핵심 E2E가 걸린다.
 
+### 실행 조건을 한 곳에서 판정하게 정리 (2026-09-11, ADR-12 편입분)
+
+같은 조건이 workflow step과 guard **두 곳에서 각각 계산**되고 있었다. 한쪽만 고치면 조용히 갈라지고, 갈라진 결과가 곧 "조건 버그로 인한 침묵 생략"이 된다.
+
+- 조건(main 대상 AND non-draft AND 런타임 변경)을 `scripts/week-10-ci/decide-e2e-scope.mjs` 하나로 모으고 workflow가 호출한다. `core`·`full`·`browsers`·`periodic`과 **생략 이유**를 출력한다.
+- main×draft×runtime 8조합의 기대값을 **손으로 적은 진리표**로 고정한 정책 테스트를 unit 집합에 뒀다 — `pnpm test:unit`에 포함되어 모든 PR에서 돈다. 기대값을 같은 조건문으로 재계산하면 중복이 테스트로 자리만 옮기므로, CI가 실제 부르는 그 명령을 실행해 `GITHUB_OUTPUT`을 읽는다.
+- guard는 재계산을 버리고 **선언된 결정과 실제 outcome의 대조**만 한다: 결정이 정확히 `true`/`false`인지, `true`면 outcome이 `success`인지, `false`면 `skipped`인지. 생략 이유도 판정 스크립트가 낸 값을 그대로 쓴다.
+
+**양쪽 경로 실 run 확인**
+
+| 경로 | run | 판정 | 결과 |
+|---|---|---|---|
+| 런타임 변경 PR | [34519689607](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34519689607) (PR #36) | `core=true` | `Core E2E (@critical)` 실행·성공, `guard: PASS — 핵심 E2E 실행·성공` |
+| 문서 전용 PR | [34550904064](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34550904064) (PR #40) | `core=false` | `## E2E: 의도적 생략 / 이유: 문서 전용 변경`, `Core E2E` skipped, guard PASS |
+
+문서 전용 run의 guard 입력은 `RUNTIME: false` · `CORE_EXPECTED: false` · `CORE_OUTCOME: skipped` · `CORE_SKIP_REASON: 문서 전용 변경`이었다. 판정 스크립트가 낸 이유가 job 출력을 거쳐 guard까지 그대로 흘렀다는 뜻이라, 단일 출처 전환이 배선 수준에서 확인된다. 브라우저 설치도 함께 생략되어 build-e2e가 46초로 끝났다(런타임 PR 1분 14초).
+
 ## 3단계 — env 게이트
 
 ### 게이트 구성
@@ -527,7 +544,7 @@ summary에 후보의 동적 인증 API HTTP 401·본문 확인 PASS와 Productio
 
 `pnpm build` = `next build`로 되돌렸고, Next 설정 로딩의 빌드용 env 검증은 그대로다. 서버용 env는 `instrumentation.register()`가 맡는다.
 
-**Preview를 일부러 제외했다.** Preview가 초과로 실패해도 얻는 게 없다 — 병합은 이미 CI 예산 검사가 막고 있고, 잃는 것은 리뷰어가 볼 화면이다. 반대로 Production은 게시 직전이라 막을 실익이 있다. 조건문 의미(production만 실행, build 실패 시 미실행)는 같은 셸 표현식을 로컬에서 `VERCEL_ENV` 세 경우로 실행해 확인했다.
+**Preview를 일부러 제외했다.** Preview가 초과로 실패해도 얻는 게 없다 — 병합은 이미 CI 예산 검사가 막고 있고, 잃는 것은 리뷰어가 볼 화면이다. 반대로 Production은 게시 직전이라 막을 실익이 있다. 조건문 의미(production만 실행, build 실패 시 미실행)는 같은 셸 표현식을 로컬에서 `VERCEL_ENV` 세 경우로 실행해 확인했고, 실제 초과 상태에서도 확인했다(아래 「Preview 제외 실증」).
 
 **배포 경로 실증 완료 (2026-09-11)**: [PR #28](https://github.com/heeji289/loop-pack-fe-l2-vol1/pull/28) 병합 커밋 `8ac18380`의 [run 34513756401](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34513756401) deploy job 로그에서 Vercel 원격 빌드가 `vercel.json`의 명령을 그대로 실행하는 것을 확인했다.
 
@@ -537,7 +554,16 @@ Running "pnpm build && if [ "$VERCEL_ENV" = production ]; then pnpm check:budget
 ## 번들 예산: PASS
 ```
 
-Production 후보 검증 후 같은 배포를 승격했다(`dpl_3sbQkLzH4pvofexvGwjugbxF8jve`). 이로써 "게시할 산출물에도 예산을 적용한다"가 설정 근거가 아니라 실행 근거가 됐다. Preview 제외는 아직 초과 상태를 만들어 확인하지 않았다 — 조건문의 의미만 로컬에서 확인한 상태다.
+Production 후보 검증 후 같은 배포를 승격했다(`dpl_3sbQkLzH4pvofexvGwjugbxF8jve`). 이로써 "게시할 산출물에도 예산을 적용한다"가 설정 근거가 아니라 실행 근거가 됐다.
+
+**Preview 제외 실증 (2026-09-11)**: 아래 빨간불 실험의 초과 커밋 `57697d5e`(홈 +35.4% 초과)에서 **Vercel Preview 배포는 success였다.** 같은 SHA의 CI는 `Bundle budget`에서 실패했으니, Preview 빌드에서는 `check:budget`이 실행되지 않았다는 뜻이다 — 실행됐다면 exit 1로 빌드가 깨졌을 것이다. `VERCEL_ENV` 분기가 실제 초과 상태에서 의도대로 동작했고, 예산을 넘긴 PR에서도 리뷰어가 볼 화면이 남는다는 설계 의도가 성립했다.
+
+| 커밋 | CI 예산 | Vercel Preview |
+|---|---|---|
+| `57697d5e` (초과) | ❌ `Bundle budget` 실패 | ✅ success ([배포](https://vercel.com/heeji289-6430s-projects/loop-pack-fe-l2-vol1/9i78YGLSzvWcyqePg5ZmdTW6WjoZ)) |
+| `af6d63ad` (복구) | ✅ PASS | ✅ success |
+
+이 실증은 빨간불 실험의 부산물이다 — Preview를 깨뜨리려고 따로 만든 상황이 아니라, 초과 PR을 만들었더니 Preview가 살아남은 것을 확인한 것이다.
 
 ### 세 환경의 측정값 일치 (2026-09-11)
 
