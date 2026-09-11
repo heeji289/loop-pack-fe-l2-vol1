@@ -195,6 +195,17 @@ A11·R23은 [e2e-scope-review](../../.claude/skills/e2e-scope-review/SKILL.md)�
 | A14 (승격 쪽) | 해당 없음 | — | — | `rule-promotion`을 **별도 스킬로 만들지 않는다.** 5단계에서 한 번 쓰는 절차이고 판정식·예외·최종 선택이 전부 작성자 몫이라, 재사용 가능한 입력·출력 계약이 서지 않는다. 절차는 스펙 5절에 두고 실행 기록은 티켓 09가 남긴다 |
 | R30 | 신규 | `scripts/week-10-ci/pr-review.md` + `.github/workflows/ai-review.yml` + `scripts/week-10-ci/pr-review.mjs` · 판별 기록은 [week10-ai-review.md](week10-ai-review.md) | `workflow_run` 자동 실행 (advisory), 기준·프롬프트는 **base SHA에서** 읽음 | 입력·프롬프트 버전 고정(`rulesRef`·`promptHash`), 부분 리뷰 표시(`status`가 `completed`·`partial`·`input_limit`·`invalid_output`·`timeout`·`auth_unavailable`을 구별), 실행 한도(1회 + 수동 재실행 1회·3분·1MiB·6,000토큰). **유효 지적 1·오탐 1의 작성자 판정과 프롬프트 v1/v2 비교는 [week10-ai-review.md](week10-ai-review.md)에 제출물로 커밋한다** — `.scratch/`는 추적되지 않아 제출에 들어가지 않는다. 룰 양방향 검증과 책임 이동은 5단계(티켓 09) 몫 |
 
+**설계 입력과 diff 입력의 구별** — `pr-review.mjs:136-155`가 변경 경로로 `route`를 넷으로 가른다.
+
+| route | 조건 | 처리 |
+| --- | --- | --- |
+| `guidance` | `AGENTS.md`·`CONVENTIONS.md`·`.claude/**`·`pr-review.*` 변경 | 리뷰한다 — 리뷰 품질을 바꾸는 변경이므로 문서라고 생략하지 않는다 (감사 「빈틈 4」) |
+| `code` | 런타임 파일이 하나라도 있음 | 리뷰한다 |
+| `design` | `docs/rfc/**`·`specs/**`만 변경 | 리뷰한다 — 전제와 관찰 경계를 본다 |
+| `docs` | 나머지(일반 안내 문서) | **`skipped: ordinary_docs_manual_review`** — 사람 검토로 넘긴다 |
+
+즉 "모든 변경에 모든 스킬"도 아니고 "문서면 전부 생략"도 아니다. 설계 문서(`design`)와 지침(`guidance`)은 diff 입력으로 리뷰하되 적용 기준이 다르고(`pr-review.md` 3항), 일반 문서만 생략한다. 로컬 스킬 중 `state-design-review`·`test-design-review`·`e2e-scope-review`는 diff가 아니라 **분류 표·시나리오·로그**를 입력으로 받는 설계 절차라 이 경로와 별개다 — 작성자가 구현 전에 직접 호출한다.
+
 **실제 도구가 관련 기준을 골라 읽는지 확인** — CI AI 리뷰가 남긴 `rules_read`를 run별로 대조했다. 기준 목록은 `pr-review.mjs:167-184`가 변경 경로로 정한다.
 
 | run | 변경 성격 | 실제로 실린 기준 | 판정 |
@@ -256,6 +267,21 @@ A11·R23은 [e2e-scope-review](../../.claude/skills/e2e-scope-review/SKILL.md)�
 ## 책임 배치 (4단계 종료 시점)
 
 5단계가 이 표의 한 칸을 「AI·사람」에서 「기계」로 옮긴다. 옮기기 **전** 상태를 여기 고정해 두어 전후를 대조할 수 있게 한다.
+
+### ID별 담당
+
+위 배치 표의 44개 ID를 담당으로 다시 묶는다. 같은 ID가 두 칸에 걸치면 **기계가 막는 범위와 판단으로 남는 범위를 갈라** 적는다.
+
+| 담당 | ID | 무엇이 그렇게 만드나 |
+| --- | --- | --- |
+| **기계가 전부 막음** | R12 (레이어·Public API) · R20 (테스트 무력화·단언 없음, **단 `{src,tests}/**/*.test.*` 범위 안에서만**) | ESLint `boundaries/dependencies` · `no-restricted-imports` · `import-x/no-cycle` · vitest 규칙 블록 |
+| **기계 + 판단 병행** | R01 (any/as는 lint, 기존 유틸 재사용·입력 신뢰 경계는 판단) · R25 (이름·props 조합은 타입, 발행 위치·중복은 규칙 없이 남김) · 검사기 테스트 (종료 코드는 테스트, 어떻게 나눌지는 설계) | lint·typecheck가 일부만 덮는다 |
+| **AI·사람 판단** | A01~A04 · A06 · A08~A14 · R02~R11 · R14~R19 · R21~R24 · R26 · R27 · R29 · R30 | 맥락이 핵심이라 문장 규칙 + 검토 절차로 둔다 |
+| **해당 없음 (범위 제외)** | A05 · A07 · R13 | RFC 검토와 성능 분석 전용 스킬은 스펙 Out of Scope |
+| **5단계 승격 후보로 남김** | R20의 `scripts`·`e2e` 구간 · R27의 고정 sleep | 문장 규칙까지만 두었고 실효 ESLint에 없다 (「빈틈 1·2」) |
+| **R28** | 부분 위임 | 산출물이 대상에 있을 때만 적용 — 도입 자체는 별도 선택 |
+
+「AI·사람 판단」이 가장 큰 묶음인 것이 이 단계의 결론이다. 10주 학습 기준의 대부분은 참·거짓을 기계로 가를 수 없고, 5단계가 옮기는 것은 그중 **하나**다.
 
 | 담당 | 이 프로젝트에서 실제로 맡는 것 | 증거 |
 | --- | --- | --- |

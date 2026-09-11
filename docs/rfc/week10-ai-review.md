@@ -14,7 +14,42 @@
 
 리뷰 기준은 일반론이 아니라 이 프로젝트가 10주간 합의한 규칙이다. 예를 들어 아래 「잘 잡은 리뷰」가 인용한 조항은 5주차 상태 설계 논의에서 나와 4단계에 `state-data.md`로 명문화한 것이다.
 
-CI(GitHub Actions)에도 AI 리뷰를 붙여 두었고(`ai-review.yml` + `scripts/week-10-ci/pr-review.md`, 과제상 선택 항목) 그 기록은 [week10-ci.md](week10-ci.md)에 있다. 이 문서의 판별 쌍은 **로컬 스킬 리뷰**에서 고른다 — 프롬프트 v1/v2 전후 비교를 같은 조건으로 실행할 수 있는 쪽이 여기뿐이기 때문이다.
+### 이 문서의 쌍은 로컬 리뷰다 — 성격을 먼저 밝힌다
+
+이 저장소에는 AI 리뷰가 **두 형태**로 있고 둘 다 이번 단계에서 정비한 기준으로 돌았다.
+
+| | 이 문서의 쌍 (로컬) | CI AI 리뷰 |
+| --- | --- | --- |
+| 대상 | 고정 SHA `f38d5831`의 **파일·흐름** — PR diff가 아니다 | 고정 base→head **PR diff** |
+| 도구 | Claude Code (Opus 5) + `.claude/skills/*` | gpt-5.6-luna + `scripts/week-10-ci/pr-review.md` (`ai-review.yml`) |
+| 프롬프트 버전 고정 | SKILL.md SHA-256 | `promptHash` (결과 JSON·PR 댓글에 기록) |
+| 외부 확인 수단 | 커밋 히스토리 + **아래 재현 명령** | PR 댓글 · run ID · 아티팩트 |
+| v1/v2 전후 비교 | **수행** | 미수행 — `OPENAI_API_KEY`가 저장소 secret에만 있어 로컬 재실행 불가 |
+
+판별 쌍을 로컬에서 고른 이유는 **프롬프트 v1/v2 전후 비교를 같은 조건으로 실행할 수 있는 쪽이 여기뿐**이기 때문이다. 대신 로컬 리뷰는 PR 댓글 같은 외부 기록이 없으므로, 검증 수단으로 재현 명령을 아래에 남긴다. CI 쪽 판별 쌍(유효: `CurrencySelect.tsx:37` hydration / 오탐: `quality.yml` `!cancelled()`)은 이 문서 끝에 함께 적는다.
+
+CI 리뷰의 안전장치·트리거·한도·required 제외 근거는 [week10-decisions.md](week10-decisions.md)의 ADR에, 첫 댓글 캡처도 같은 문서에 있다.
+
+### 재현 명령
+
+```bash
+# 프롬프트 v1 / v2 (v1은 이 문서 커밋의 직전 상태)
+git show f38d5831:.claude/skills/test-review/SKILL.md | shasum -a 256   # 32672c0a…
+shasum -a 256 .claude/skills/test-review/SKILL.md                       # 868f02e7…
+
+# 헛소리가 인용한 CI 명령이 실재하지 않음을 확인
+grep -n "playwright test --grep" .github/workflows/quality.yml   # --workers 없음
+grep -n "workers" playwright.config.ts                            # 설정 자체가 없음
+grep -rn -- "--workers" docs/ specs/                              # 비용 측정·과제 문서에만
+
+# 잘 잡은 리뷰의 비대칭 확인
+grep -n "clearCheckoutDraft" src/features/auth/ui/LogoutButton.tsx src/app/query-client.ts
+
+# 리뷰가 근거로 쓴 뮤테이션 (각각 돌린 뒤 git checkout -- <file>로 원복)
+pnpm vitest run src/features/auth src/_pages/login src/entities/session tests/session-expired.dom.test.tsx
+#   → 35 passed. LoginForm.tsx:38의 toSafeNextPath(...)를 ?? '/'로 바꾸면 35개가 그대로 통과한다
+#   → entities/session/api/queries.ts:53의 cancelQueries를 지우면 17개가 그대로 통과한다
+```
 
 ---
 
@@ -101,7 +136,7 @@ draft는 sessionStorage에 있고(`checkout-store.ts:67` — "같은 탭의 새�
 
 결론이 통째로 틀린 게 아니라 **근거 하나가 다른 파일에서 옮겨 왔다.** 파일명·줄번호·인용 형식이 다 갖춰져 있어 검증 없이는 진짜처럼 읽힌다. 등급까지 최고였다.
 
-같은 시기 CI AI 리뷰(gpt-5.6-luna)가 낸 오탐도 **같은 실패 모드**였다 — `quality.yml`의 `if: ${{ !cancelled() && ... }}`에 "암묵적 `success()`가 함께 적용된다"고 `confidence: high`로 단언했으나, GitHub 규칙상 `!cancelled()`는 status check 함수라 적용되지 않고, 같은 저장소 [run 34518767357](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34518767357)에서 `Bundle budget: failure`인데 `Server env lifecycle`·`Upload gate reports`가 모두 `success`로 실행돼 반증됐다.
+같은 시기 CI AI 리뷰(gpt-5.6-luna)가 낸 오탐도 **같은 실패 모드**였다 — GitHub Actions의 `!cancelled()` 의미론을 지어냈고 실제 run이 반증했다(아래 [CI AI 리뷰 쪽 판별 쌍](#ci-ai-리뷰-쪽-판별-쌍-pr-diff)).
 
 **두 오탐의 공통점: 자료에 없는 사실을 전제로 삼았다.** 하나는 플랫폼 동작 규칙을 지어냈고, 하나는 다른 문서의 명령을 옮겼다.
 
@@ -179,6 +214,30 @@ CI 쪽 `pr-review.md` 2항에는 조항이 있었지만 "**확신이 낮으면**
 헛소리를 찾으려고 리뷰 27건의 지적을 코드로 훑었고, **오히려 8건이 확증됐다** — `SessionMenu.tsx:33`의 분기 순서(확인된 비로그인에서 재조회 실패 시 로그인 링크 소실), `Dialog.tsx`에 포커스 코드 0건인데 `aria-modal="true"` 선언, `use-order-draft.ts:45`의 `isError` 위치, `OrdersPage`의 같은 파일 내 실패 정책 분열, `role="status"` 누락, 타임존 고정 없는 `toLocaleString` 단언, 픽스처의 `p01`/`p1` 두 세계, `split('/')[1] || 'direct'` 두 벌.
 
 정반대 결론이 난 자리도 하나 있었다 — 같은 `component-review` 스킬이 `productById` Map 중복을 장바구니에서는 `[major]` 공통화하라고, 주문 흐름에서는 공통화하지 말라고 냈다. 코드를 놓고 보니 **사실 다툼이 아니라 판단 다툼**이었다(세 곳의 폴백이 실제로 2종). 기계에 내릴 수 없는 판단의 사례로 남긴다.
+
+## CI AI 리뷰 쪽 판별 쌍 (PR diff)
+
+로컬 쌍과 별개로, 진짜 PR diff를 대상으로 한 쌍도 같은 기간에 확보했다. 프롬프트 v1/v2 전후 비교는 이쪽에서 수행하지 못했다(`OPENAI_API_KEY`가 저장소 secret에만 있다).
+
+**잘 잡은 리뷰** — PR #35 · [run 34519398473](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34519398473) · base `247e44d3` → head `af6d63ad` · `promptHash ee511404…` · confidence high
+
+> `src/features/product/ui/CurrencySelect.tsx:37` [`.claude/rules/state-data.md#저장해 두는 상태`] `CurrencySelect`는 서버 컴포넌트 트리에서 렌더되는 `'use client'` 컴포넌트인데, `useState(readStoredCurrency)`가 초기 렌더 중 `window.localStorage`를 읽는다. 서버에서는 `window`가 없어 `catch`를 통해 KRW를 그리지만, 브라우저 hydration에서는 저장된 USD/JPY를 읽어 다른 `value`를 계산한다. … 복원 전과 복원 후를 구분하는 상태도 없고 관련 테스트도 제공되지 않았다.
+
+인용한 조항(「복원은 첫 렌더 뒤에 시작해 서버 HTML과 어긋나지 않게 한다. **복원 전**과 **값이 없음**은 다른 상태」)이 주장을 정확히 관장한다. **4단계에서 새로 만든 rule이 실제 지적을 만들어낸 사례**다.
+
+**헛소리** — PR #34 · [run 34517159942](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34517159942) · confidence high ×2
+
+> `.github/workflows/quality.yml:228` … `if: ${{ !cancelled() && steps.build.outcome == 'success' }}` … 이 조건에는 `always()` 같은 status check 함수가 없어 GitHub Actions의 암묵적 `success()`가 함께 적용되므로, build는 성공했지만 예산 검사만 실패한 경우에도 env lifecycle이 skipped될 수 있다.
+
+반증 — [run 34518767357](https://github.com/heeji289/loop-pack-fe-l2-vol1/actions/runs/34518767357)(번들 예산 빨간불 실험)의 `build-e2e` job:
+
+```
+- Bundle budget: failure
+- Server env lifecycle: success   ← 실행됨
+- Upload gate reports: success    ← 실행됨
+```
+
+`!cancelled()`는 status check 함수이므로 암묵 `success()`가 적용되지 않는다. AI가 플랫폼 동작 규칙을 지어냈고 같은 저장소의 실제 run이 반증한다.
 
 ## 책임 배치
 
