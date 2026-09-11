@@ -575,14 +575,15 @@ CI와 Vercel은 **세 대상 모두 바이트까지 동일**하다. 로컬과는
 
 **코멘트만으로 판독된다.** 원시 로그를 열지 않고 대상·집계·측정값·base 대비 증가량·임계값·초과량·초과율을 읽을 수 있었고, 아티팩트 `gate-reports`의 `budget.md`와 대조해 같은 값임을 확인했다. 코멘트는 **하나가 유지된 채 갱신**됐다 — 원복 후에도 새 댓글이 생기지 않고 같은 코멘트가 run `34519214029`·SHA `af6d63ad` 기준 PASS로 바뀌었다.
 
-| 화면 | |
-| --- | --- |
-| 실패 코멘트 | ![실패 코멘트](images/01-comment-fail.png) |
-| 실패 run | ![실패 run](images/02-summary-fail.png) |
-| 성공 코멘트 | ![성공 코멘트](images/03-comment-pass.png) |
-| 성공 run | ![성공 run](images/04-summary-pass.png) |
+**두 채널이 같은 결과를 싣는다.** 코멘트와 job summary를 나란히 놓고 대조했다 — 세 대상의 측정값·base 대비·임계값·초과량·초과율이 자릿수까지 같고, 아티팩트 `gate-reports`의 `budget.md`와도 같다. 표시를 위해 검사를 다시 돌리지 않는다는 계약이 실제로 지켜진다.
 
-**캡처의 한계**: run 화면은 비로그인 상태로 찍어 job summary 본문(예산 표·env 절)이 렌더링되지 않는다. 그 내용은 같은 run의 `gate-reports` 아티팩트와 위 코멘트 캡처로 대신 확인한다.
+| | 빨간불 (`57697d5e`) | 초록불 (`af6d63ad`) |
+| --- | --- | --- |
+| PR 코멘트 | ![실패 코멘트](images/01-comment-fail.png) | ![성공 코멘트](images/03-comment-pass.png) |
+| job summary | ![실패 summary](images/05-summary-fail.png) | ![성공 summary](images/06-summary-pass.png) |
+| run 전체 | ![실패 run](images/02-run-fail.png) | ![성공 run](images/04-run-pass.png) |
+
+**두 채널의 차이는 의도한 것이다.** summary는 job 단위 기록이라 `E2E: 핵심 E2E 실행`과 빌드 단계의 `env 검증: PASS (build/local)`까지 함께 쌓이고, 코멘트는 최종 판정만 싣는다. 그래서 summary에는 `env 검증` 제목이 빌드용·서버용 두 번 나타나고 코멘트에는 한 번만 나온다 — 중복이 아니라 검증 시점이 둘이라는 뜻이지만, summary만 보면 같은 제목이 두 번 찍혀 읽기 혼란스럽다. 제목에 단계를 드러내는 정리는 후속 과제로 남긴다.
 
 ### required 판단 — env와 같이 별도 check를 만들지 않았다
 
