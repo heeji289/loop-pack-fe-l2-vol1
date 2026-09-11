@@ -583,7 +583,17 @@ CI와 Vercel은 **세 대상 모두 바이트까지 동일**하다. 로컬과는
 | job summary | ![실패 summary](images/05-summary-fail.png) | ![성공 summary](images/06-summary-pass.png) |
 | run 전체 | ![실패 run](images/02-run-fail.png) | ![성공 run](images/04-run-pass.png) |
 
-**두 채널의 차이는 의도한 것이다.** summary는 job 단위 기록이라 `E2E: 핵심 E2E 실행`과 빌드 단계의 `env 검증: PASS (build/local)`까지 함께 쌓이고, 코멘트는 최종 판정만 싣는다. 그래서 summary에는 `env 검증` 제목이 빌드용·서버용 두 번 나타나고 코멘트에는 한 번만 나온다 — 중복이 아니라 검증 시점이 둘이라는 뜻이지만, summary만 보면 같은 제목이 두 번 찍혀 읽기 혼란스럽다. 제목에 단계를 드러내는 정리는 후속 과제로 남긴다.
+**대조하다 찾은 것 — summary의 `env 검증` 제목 중복.** 위 캡처 시점의 summary에는 `env 검증: PASS (build/local)`(Build step)과 `env 검증: PASS`(서버 실행 검사)가 **같은 제목으로 두 번** 찍혀 있었다. 검증 시점이 둘이라 중복 기록은 아니지만, 읽는 쪽에서는 같은 판정이 두 번 나온 것으로 보인다.
+
+Build step의 성공 기록을 지워 정리했다. 서버 env 실행 검사의 판정이 이미 `빌드용 통과. 실제 next start의 …`로 **두 단계를 묶어** 서술하므로, 앞의 한 줄은 그것과 겹치기만 한다. 실패는 각 검증 지점이 그 자리에서 남기므로 잃는 정보가 없다 — 지금은 어느 경로에서도 `env 검증` 제목이 정확히 하나이고, 실패일 때는 제목이 단계를 밝힌다.
+
+| 경로 | summary·`reports/env.md`에 남는 판정 |
+| --- | --- |
+| 빌드용 env 오류 | `env 검증: FAIL (build/local)` + 변수명·이유 |
+| 서버 실행 검사 실패 | `env 검증: FAIL (서버 실행)` + 실패한 검사 이름 |
+| 둘 다 통과 | `env 검증: PASS` (본문이 두 단계를 서술) |
+
+코멘트는 `reports/env.md`를 그대로 싣는 계약이라 이 정리가 두 채널에 함께 반영된다.
 
 ### required 판단 — env와 같이 별도 check를 만들지 않았다
 
