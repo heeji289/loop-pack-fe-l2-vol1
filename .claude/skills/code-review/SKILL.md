@@ -10,8 +10,6 @@ Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
 
 Both axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings.
 
-The issue tracker should have been provided to you. If `docs/agents/issue-tracker.md` is missing, tell the user to run `/setup-matt-pocock-skills`.
-
 ## Process
 
 ### 1. Pin the fixed point
@@ -26,16 +24,33 @@ Before going further, confirm the fixed point resolves (`git rev-parse <fixed-po
 
 Look for the originating spec, in this order:
 
-1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.), fetched via the workflow in `docs/agents/issue-tracker.md`.
-2. A path the user passed as an argument.
-3. A spec file under `docs/`, `specs/`, or `.scratch/` matching the branch name or feature.
+1. A path the user passed as an argument.
+2. `specs/*.spec.md` matching the branch name or feature, and the ticket it belongs to under `.scratch/*/issues/`. Commit messages name the step ("3단계 티켓 2") more often than an issue number.
+3. A decision record under `docs/rfc/` when the change is CI·measurement·architecture rather than a feature.
 4. If nothing is found, ask the user where the spec is. If they say there isn't one, the **Spec** sub-agent will skip and report "no spec available".
+
+Specs in this repo are point-in-time records — they are not updated when later work changes the implementation. When the diff contradicts a spec, check whether a later spec or `docs/rfc/` decision supersedes it before calling it a gap.
 
 ### 3. Identify the standards sources
 
-Anything in the repo that documents how code should be written, such as `CODING_STANDARDS.md` or `CONTRIBUTING.md`.
+Always: `CONVENTIONS.md` (the canon) and `AGENTS.md` (which rule file a change pulls in).
 
-On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below: a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
+On top of those, pick the rule files and review skills the **changed paths** call for. Don't load all of them; don't skip one because the diff looks small. Each is canon for its area — cite it, don't restate it.
+
+| Changed | Also read | Skill to route to |
+| --- | --- | --- |
+| state, store, query, cache, persist, auth session | `.claude/rules/state-data.md` | `state-design-review` (before deciding where state lives) |
+| screen render, loading, empty, error, a11y | `.claude/rules/rendering.md` | `component-review` |
+| shared UI public API (`src/shared/ui/**`) | `.claude/rules/rendering.md` | `analyze-component` |
+| anything justified by performance | `.claude/rules/performance.md` | — (measurement is the author's) |
+| tests, fixtures, MSW handlers, `e2e/**`, `scripts/**/*.test.*` | `.claude/rules/testing.md` | `test-review` (written tests) · `test-design-review` (what to protect) |
+| E2E scope — what to include or drop | `.claude/rules/testing.md` | `e2e-scope-review` |
+| layer placement, import direction, Public API | — (ESLint `boundaries` is canon) | `architecture-review` |
+| `.github/workflows/**`, `scripts/week-10-ci/**` | — (workflow comments · `docs/rfc/week10-ci.md`) | `workflow-review` |
+
+Skip what tooling already decides — `pnpm lint` and `pnpm typecheck` own their range, and re-reporting it is noise. Naming the rule file a finding rests on is required; a finding whose cited clause doesn't actually govern the claim is not a finding.
+
+The Standards axis also always carries the **smell baseline** below: a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
 
 - **The repo overrides.** A documented repo standard always wins; where it endorses something the baseline would flag, suppress the smell.
 - **Always a judgement call.** Each smell is a labelled heuristic ("possible Feature Envy"), never a hard violation. Like any standard here, skip anything tooling already enforces.
